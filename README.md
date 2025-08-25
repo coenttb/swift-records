@@ -52,7 +52,6 @@ targets: [
 
 ```swift
 import Records
-import StructuredQueries
 
 // Define your model using @Table macro
 @Table("users")
@@ -211,46 +210,7 @@ try await db.withTransaction { db in
 
 ### Migrations
 
-```swift
-// Define migrations
-struct CreateUsersTable {
-    func apply(_ db: any Database.Connection.`Protocol`) async throws {
-        try await db.execute("""
-            CREATE TABLE users (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            )
-        """)
-    }
-}
-
-// Apply migrations at app startup
-@main
-struct MyApp {
-    static func main() async throws {
-        // Configure database
-        try await prepareDependencies {
-            $0.defaultDatabase = try await Database.Pool(
-                configuration: .fromEnvironment()
-            )
-        }
-        
-        // Run migrations
-        @Dependency(\.defaultDatabase) var db
-        
-        var migrator = Database.Migrator()
-        migrator.registerMigration("create_users_table") { db in
-            try await CreateUsersTable().apply(db)
-        }
-        
-        try await migrator.migrate(db)
-        
-        // Start your app...
-    }
-}
-```
+TBD
 
 ## Testing
 
@@ -262,9 +222,9 @@ import Records
 import RecordsTestSupport
 import Dependencies
 
-@Suite("User Tests", .dependency(\.database, Database.TestDatabase.withSchema()))
+@Suite("User Tests", .dependency(\.defaultDatabase, Database.TestDatabase.withSchema()))
 struct UserTests {
-    @Dependency(\\.database) var db
+    @Dependency(\.defaultDatabase) var db
     
     @Test func createUser() async throws {
         // Each test runs in its own schema, enabling parallel execution
@@ -401,4 +361,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - [Point-Free](https://www.pointfree.co) for StructuredQueries and Dependencies
 - The [Vapor](https://vapor.codes) team for PostgresNIO
-- The Swift community for continuous inspiration
+- [GRDB](https://github.com/groue/GRDB.swift) for API design inspiration 
