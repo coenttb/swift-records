@@ -1,0 +1,64 @@
+import Foundation
+
+extension Database {
+    /// Errors that can occur during database operations.
+    public enum Error: Swift.Error, LocalizedError, Sendable {
+        /// The database pool is shutting down and cannot accept new operations.
+        case poolShuttingDown
+
+        /// Connection to the database timed out.
+        case connectionTimeout(TimeInterval)
+
+        /// Maximum number of connections in the pool has been reached.
+        case poolExhausted(maxConnections: Int)
+
+        /// The database is not configured.
+        case notConfigured
+
+        /// A migration with the same identifier has already been registered.
+        case duplicateMigration(identifier: String)
+
+        /// A migration failed to apply.
+        case migrationFailed(identifier: String, underlyingError: Swift.Error)
+
+        /// The database schema needs to be erased but eraseDatabaseOnSchemaChange is false.
+        case schemaChangeDetected(message: String)
+
+        /// Transaction operation failed.
+        case transactionFailed(underlyingError: Swift.Error)
+
+        /// Invalid configuration provided.
+        case invalidConfiguration(message: String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .poolShuttingDown:
+                return "Database pool is shutting down and cannot accept new operations"
+
+            case .connectionTimeout(let timeout):
+                return "Database connection timed out after \(timeout) seconds"
+
+            case .poolExhausted(let maxConnections):
+                return "Database connection pool exhausted (max connections: \(maxConnections))"
+
+            case .notConfigured:
+                return "Database has not been configured. Please configure the database before use."
+
+            case .duplicateMigration(let identifier):
+                return "Migration with identifier '\(identifier)' has already been registered"
+
+            case .migrationFailed(let identifier, let error):
+                return "Migration '\(identifier)' failed: \(error.localizedDescription)"
+
+            case .schemaChangeDetected(let message):
+                return "Database schema change detected: \(message). Set eraseDatabaseOnSchemaChange to true to automatically handle this."
+
+            case .transactionFailed(let error):
+                return "Transaction failed: \(error.localizedDescription)"
+
+            case .invalidConfiguration(let message):
+                return "Invalid database configuration: \(message)"
+            }
+        }
+    }
+}
