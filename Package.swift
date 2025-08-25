@@ -21,7 +21,8 @@ let package = Package(
         .package(url: "https://github.com/pointfreeco/swift-structured-queries", from: "0.13.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.0"),
         .package(url: "https://github.com/coenttb/swift-environment-variables", from: "0.0.1"),
-        .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.5.0")
+        .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.5.0"),
+        .package(url: "https://github.com/pointfreeco/swift-concurrency-extras", from: "1.3.0")
     ],
     targets: [
         .target(
@@ -38,7 +39,8 @@ let package = Package(
             name: "DatabasePostgresTests",
             dependencies: [
                 "DatabasePostgres",
-                .product(name: "DependenciesTestSupport", package: "swift-dependencies")
+                .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
+                .product(name: "ConcurrencyExtras", package: "swift-concurrency-extras")
             ]
         )
     ],

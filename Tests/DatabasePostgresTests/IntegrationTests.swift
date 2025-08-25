@@ -4,7 +4,10 @@ import StructuredQueries
 import Dependencies
 import DependenciesTestSupport
 
-@Suite
+@Suite(
+    "Integration Tests",
+    .dependency(\.envVars, .development),
+)
 struct IntegrationTests {
     @Test
     func tableUsagePattern() async throws {

@@ -13,6 +13,7 @@ extension Database {
     public final class Pool: Writer, Sendable {
         private let postgres: PostgresQueryDatabase
         private let writeSerializer = WriteSerializer()
+        private let closeState = CloseState()
         
         /// Initialize with a PostgreSQL configuration with pooling enabled.
         public init(
@@ -65,6 +66,9 @@ extension Database {
         
         /// Close all database connections in the pool.
         public func close() async throws {
+            let alreadyClosed = await closeState.markClosed()
+            guard !alreadyClosed else { return }
+            
             try await writeSerializer.perform {
                 try await postgres.close()
             }
@@ -79,6 +83,21 @@ extension Database.Pool {
     private actor WriteSerializer {
         func perform<T: Sendable>(_ operation: () async throws -> T) async throws -> T {
             try await operation()
+        }
+    }
+    
+    /// Internal actor to manage close state thread-safely
+    private actor CloseState {
+        private var closed = false
+        
+        var isClosed: Bool {
+            closed
+        }
+        
+        func markClosed() -> Bool {
+            let wasClosed = closed
+            closed = true
+            return wasClosed
         }
     }
 }

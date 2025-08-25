@@ -4,7 +4,10 @@
 //import StructuredQueries
 //import DependenciesTestSupport
 //
-//@Suite("Statement Extensions")
+//@Suite(
+//    "Statement Extensions",
+//    .dependency(\.envVars, .development),
+//)
 //struct StatementExtensionTests {
 //    
 //    @Test("Statement.execute(db) works correctly")

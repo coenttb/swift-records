@@ -5,7 +5,10 @@
 //import StructuredQueriesPostgres
 //import DependenciesTestSupport
 //
-//@Suite("Transaction Management")
+//@Suite(
+//    "Transaction Management",
+//    .dependency(\.envVars, .development),
+//)
 //struct TransactionTests {
 //    
 //    @Test("withTransaction commits on success")

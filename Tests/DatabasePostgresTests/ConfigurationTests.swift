@@ -8,6 +8,7 @@ import DependenciesTestSupport
 @Suite(
     "Configuration",
     .dependency(\.envVars, .development),
+    .serialized
 )
 struct ConfigurationTests {
     

@@ -12,6 +12,7 @@ extension Database {
     /// All database operations are executed sequentially, making it suitable for most applications.
     public actor Queue: Writer {
         private let postgres: PostgresQueryDatabase
+        private var isClosed = false
         
         /// Initialize with a PostgreSQL configuration.
         public init(configuration: PostgresQueryDatabase.Configuration) async throws {
@@ -37,6 +38,8 @@ extension Database {
         
         /// Close the database connection.
         public func close() async throws {
+            guard !isClosed else { return }
+            isClosed = true
             try await postgres.close()
         }
     }

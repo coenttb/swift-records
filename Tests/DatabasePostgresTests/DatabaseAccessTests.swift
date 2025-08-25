@@ -1,46 +1,54 @@
-//import Testing
-//import Foundation
-//import DatabasePostgres
-//import StructuredQueries
-//import StructuredQueriesPostgres
-//import DependenciesTestSupport
-//
-//@Suite("Database Access Patterns")
-//struct DatabaseAccessTests {
-//    
-//    @Test("Database.Queue serializes all operations")
-//    func testDatabaseQueueSerializesAccess() async throws {
-//        let database = try await TestDatabase.makeTestDatabase()
-//        defer {
-//            Task { try? await TestDatabase.cleanupTestTables(database) }
-//        }
-//        
-//        try await TestDatabase.setupTestTables(database)
-//        
-//        // Test that operations are serialized
-//        let results = await withTaskGroup(of: Int?.self) { group in
-//            for i in 1...10 {
-//                group.addTask {
-//                    try? await database.write { db in
-//                        // Simulate work
-//                        try? await Task.sleep(nanoseconds: 10_000)
-//                        return i
-//                    }
-//                }
-//            }
-//            
-//            var collected: [Int] = []
-//            for await result in group {
-//                if let result = result {
-//                    collected.append(result)
-//                }
-//            }
-//            return collected
-//        }
-//        
-//        // All operations should complete
-//        #expect(results.count == 10)
-//    }
+import Testing
+import Foundation
+import DatabasePostgres
+import StructuredQueries
+import StructuredQueriesPostgres
+import DependenciesTestSupport
+import Dependencies
+
+@Suite(
+    "Database Access Patterns",
+    .dependency(\.envVars, .development),
+    .serialized
+)
+struct DatabaseAccessTests {
+    
+    @Test("Database.Queue serializes all operations")
+    func testDatabaseQueueSerializesAccess() async throws {
+        do {
+            let database = try await TestDatabase.makeTestDatabase()
+            
+            // Prepare clean database for test
+            try await TestDatabase.prepareForTest(database)
+        
+        // Test that operations are serialized
+        let results = await withTaskGroup(of: Int?.self) { group in
+            for i in 1...10 {
+                group.addTask {
+                    try? await database.write { db in
+                        // Simulate work
+                        try? await Task.sleep(nanoseconds: 10_000)
+                        return i
+                    }
+                }
+            }
+            
+            var collected: [Int] = []
+            for await result in group {
+                if let result = result {
+                    collected.append(result)
+                }
+            }
+            return collected
+        }
+        
+        // All operations should complete
+        #expect(results.count == 10)
+        } catch {
+            print("Detailed error: \(String(reflecting: error))")
+            throw error
+        }
+    }
 //    
 ////    @Test("Database.Pool allows concurrent reads")
 ////    func testDatabasePoolAllowsConcurrentReads() async throws {
@@ -82,88 +90,104 @@
 ////        #expect(totalTime < 0.3) // Allow some overhead
 ////        #expect(readTimes.count == 5)
 ////    }
-//    
-//    @Test("Database.Pool serializes write operations")
-//    func testDatabasePoolSerializesWrites() async throws {
-//        let pool = try await TestDatabase.makeTestPool()
-//        defer {
-//            Task { try? await TestDatabase.cleanupTestTables(pool) }
-//        }
-//        
-//        try await TestDatabase.setupTestTables(pool)
-//        
-//        let writeOrder = await withTaskGroup(of: Int?.self) { group in
-//            for i in 1...5 {
-//                group.addTask {
-//                    try? await pool.write { db in
-//                        try await User.insert {
-//                            User.Draft(
-//                                name: "User \(i)",
-//                                email: "user\(i)@test.com",
-//                                createdAt: Date()
-//                            )
-//                        }.execute(db)
-//                        return i
-//                    }
-//                }
-//            }
-//            
-//            var order: [Int] = []
-//            for await result in group {
-//                if let result = result {
-//                    order.append(result)
-//                }
-//            }
-//            return order
-//        }
-//        
-//        // All writes should complete
-//        #expect(writeOrder.count == 5)
-//        
-//        // Verify all users were inserted
-//        let userCount = try await pool.read { db in
-//            try await User.all.fetchCount(db)
-//        }
-//        #expect(userCount == 5)
-//    }
-//    
-//    @Test("Read and write operations don't interfere")
-//    func testReadWriteIsolation() async throws {
-//        let database = try await TestDatabase.makeTestDatabase()
-//        defer {
-//            Task { try? await TestDatabase.cleanupTestTables(database) }
-//        }
-//        
-//        try await TestDatabase.setupTestTables(database)
-//        
-//        // Insert initial data
-//        try await database.write { db in
-//            try await User.insert {
-//                User.Draft(name: "Initial", email: "initial@test.com", createdAt: Date())
-//            }.execute(db)
-//        }
-//        
-//        // Concurrent read and write
-//        async let readResult = database.read { db in
-//            try await User.all.fetchCount(db)
-//        }
-//        
-//        async let writeResult: Void = database.write { db in
-//            try await User.insert {
-//                User.Draft(name: "New", email: "new@test.com", createdAt: Date())
-//            }.execute(db)
-//        }
-//        
-//        let initialCount = try await readResult
-//        try await writeResult
-//        
-//        let finalCount = try await database.read { db in
-//            try await User.all.fetchCount(db)
-//        }
-//        
-//        #expect(initialCount == 1)
-//        #expect(finalCount == 2)
-//    }
+    
+    @Test("Database.Pool serializes write operations")
+    func testDatabasePoolSerializesWrites() async throws {
+        do {
+            let pool = try await TestDatabase.makeTestPool()
+        
+        // Prepare clean database for test
+        try await TestDatabase.prepareForTest(pool)
+        
+        let writeOrder = await withTaskGroup(of: Int?.self) { group in
+            for i in 1...5 {
+                group.addTask {
+                    try? await pool.write { db in
+                        try await User.insert {
+                            User.Draft(
+                                name: "User \(i)",
+                                email: "user\(i)@test.com",
+                                createdAt: Date()
+                            )
+                        }.execute(db)
+                        return i
+                    }
+                }
+            }
+            
+            var order: [Int] = []
+            for await result in group {
+                if let result = result {
+                    order.append(result)
+                }
+            }
+            return order
+        }
+        
+        // All writes should complete
+        #expect(writeOrder.count == 5)
+        
+        // Verify all users were inserted
+        // Using User.where with always-true condition as workaround for User.all
+        let userCount = try await pool.read { db in
+            try await User
+                .where { _ in true }
+                .asSelect()
+                .fetchCount(db)
+        }
+        #expect(userCount == 5)
+        } catch {
+            print("Detailed error: \(String(reflecting: error))")
+            throw error
+        }
+    }
+    
+    @Test("Read and write operations don't interfere")
+    func testReadWriteIsolation() async throws {
+        do {
+            let database = try await TestDatabase.makeTestDatabase()
+            
+            // Prepare clean database for test
+            try await TestDatabase.prepareForTest(database)
+        
+        // Insert initial data
+        try await database.write { db in
+            try await User.insert {
+                User.Draft(name: "Initial", email: "initial@test.com", createdAt: Date())
+            }.execute(db)
+        }
+        
+        // Concurrent read and write
+        async let readResult = database.read { db in
+            try await User
+                .where { _ in true }
+                .asSelect()
+                .fetchCount(db)
+        }
+        
+        async let writeResult: Void = database.write { db in
+            try await User.insert {
+                User.Draft(name: "New", email: "new@test.com", createdAt: Date())
+            }.execute(db)
+        }
+        
+        let initialCount = try await readResult
+        try await writeResult
+        
+        let finalCount = try await database.read { db in
+            try await User
+                .where { _ in true }
+                .asSelect()
+                .fetchCount(db)
+        }
+        
+        #expect(initialCount == 1)
+        #expect(finalCount == 2)
+        } catch {
+            print("Detailed error: \(String(reflecting: error))")
+            throw error
+        }
+    }
 //    
 //    @Test("Actor-based concurrency handles multiple operations")
 //    func testActorConcurrency() async throws {
@@ -210,4 +234,4 @@
 //        // Should have inserted users for i = 3, 6, 9, 12, 15, 18
 //        #expect(userCount == 6)
 //    }
-//}
+}
