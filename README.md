@@ -4,7 +4,7 @@
 ![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20macOS%20%7C%20tvOS%20%7C%20watchOS-blue.svg)
 ![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 
-A high-level, type-safe database abstraction layer for PostgreSQL in Swift, built on [StructuredQueries](https://github.com/pointfreeco/swift-structured-queries) and [PostgresNIO](https://github.com/vapor/postgres-nio).
+A high-level, type-safe database abstraction layer for PostgreSQL in Swift, built on [StructuredQueries](https://github.com/pointfreeco/swift-structured-queries) and [PostgresNIO](https://github.com/vapor/postgres-nio), inspired by GRDB.
 
 ## Features
 
@@ -63,86 +63,137 @@ struct User {
     let createdAt: Date
 }
 
-// Initialize database
-let db = try await Database.bootstrap(
-    configuration: .init(
-        host: "localhost",
-        port: 5432,
-        database: "myapp",
-        username: "postgres",
-        password: "password",
-        pooling: .enabled(min: 5, max: 20)
-    )
-)
+// Configure database at app startup
+import Dependencies
 
-// Or use environment variables
-let db = try await Database.bootstrap(
-    configuration: .fromEnvironment(
-        pooling: .enabled(min: 5, max: 20)
-    )
-)
+@main
+struct MyApp {
+    static func main() async throws {
+        // Configure with explicit settings
+        try await prepareDependencies {
+            $0.defaultDatabase = try await Database.Pool(
+                configuration: .init(
+                    host: "localhost",
+                    port: 5432,
+                    database: "myapp",
+                    username: "postgres",
+                    password: "password"
+                ),
+                minConnections: 5,
+                maxConnections: 20
+            )
+        }
+        
+        // Or use environment variables
+        try await prepareDependencies {
+            $0.defaultDatabase = try await Database.Pool(
+                configuration: .fromEnvironment(),
+                minConnections: 5,
+                maxConnections: 20
+            )
+        }
+        
+        // Your app code here...
+    }
+}
 ```
 
 ### Query Operations
 
 ```swift
-// Fetch all users
-let users = try await db.reader.read { db in
-    try await User.fetchAll(db)
-}
+import Dependencies
 
-// Fetch with conditions
-let activeUsers = try await db.reader.read { db in
-    try await User
-        .filter { $0.isActive }
-        .order(by: .descending(\\.createdAt))
-        .limit(10)
-        .fetchAll(db)
-}
-
-// Insert new user
-try await db.writer.write { db in
-    try await User.insert {
-        ($0.name, $0.email, $0.createdAt)
-    } values: {
-        ("Alice", "alice@example.com", Date())
-    }.execute(db)
-}
-
-// Update users
-try await db.writer.write { db in
-    try await User
-        .filter { $0.email == "alice@example.com" }
-        .update { $0.name = "Alice Smith" }
-        .execute(db)
-}
-
-// Delete users
-try await db.writer.write { db in
-    try await User
-        .filter { $0.createdAt < thirtyDaysAgo }
-        .delete()
-        .execute(db)
+// Access database via dependency injection
+struct UserService {
+    @Dependency(\.defaultDatabase) var db
+    
+    // Fetch all users
+    func fetchUsers() async throws -> [User] {
+        try await db.read { db in
+            try await User.fetchAll(db)
+        }
+    }
+    
+    // Fetch with conditions
+    func fetchActiveUsers() async throws -> [User] {
+        try await db.read { db in
+            try await User
+                .filter { $0.isActive }
+                .order(by: .descending(\.createdAt))
+                .limit(10)
+                .fetchAll(db)
+        }
+    }
+    
+    // Insert new user
+    func createUser(name: String, email: String) async throws {
+        try await db.write { db in
+            try await User.insert {
+                ($0.name, $0.email, $0.createdAt)
+            } values: {
+                (name, email, Date())
+            }.execute(db)
+        }
+    }
+    
+    // Update user
+    func updateUserName(email: String, newName: String) async throws {
+        try await db.write { db in
+            try await User
+                .filter { $0.email == email }
+                .update { $0.name = newName }
+                .execute(db)
+        }
+    }
+    
+    // Delete old users
+    func deleteOldUsers(olderThan date: Date) async throws {
+        try await db.write { db in
+            try await User
+                .filter { $0.createdAt < date }
+                .delete()
+                .execute(db)
+        }
+    }
 }
 ```
 
 ### Transactions
 
 ```swift
-// Basic transaction
-try await db.writer.withTransaction { db in
-    try await User.insert { ... }.execute(db)
-    try await Post.insert { ... }.execute(db)
-    // Both succeed or both are rolled back
-}
-
-// Transaction with isolation level
-try await db.writer.withTransaction(isolation: .serializable) { db in
-    // Your transactional operations
+struct TransferService {
+    @Dependency(\.defaultDatabase) var db
+    
+    // Basic transaction
+    func createUserWithProfile(name: String, email: String) async throws {
+        try await db.withTransaction { db in
+            let userId = try await User.insert {
+                ($0.name, $0.email, $0.createdAt)
+            } values: {
+                (name, email, Date())
+            }
+            .returning(\.id)
+            .fetchOne(db)
+            
+            try await Profile.insert {
+                ($0.userId, $0.bio)
+            } values: {
+                (userId!, "New user")
+            }.execute(db)
+            // Both succeed or both are rolled back
+        }
+    }
+    
+    // Transaction with isolation level
+    func transferFunds(from: Int, to: Int, amount: Decimal) async throws {
+        try await db.withTransaction(isolation: .serializable) { db in
+            // Your transactional operations
+        }
+    }
 }
 
 // Savepoints for nested transactions
-try await db.writer.withTransaction { db in
+try await db.withTransaction { db in
     try await User.insert { ... }.execute(db)
     
     do {
@@ -162,29 +213,43 @@ try await db.writer.withTransaction { db in
 
 ```swift
 // Define migrations
-struct CreateUsersTable: Migration {
-    let identifier = "create_users_table"
-    
+struct CreateUsersTable {
     func apply(_ db: any DatabaseProtocol) async throws {
         try await db.execute("""
             CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         """)
     }
 }
 
-// Register and run migrations
-let migrations: [any Migration] = [
-    CreateUsersTable(),
-    CreatePostsTable(),
-    AddUserAvatarColumn()
-]
-
-try await db.migrate(migrations)
+// Apply migrations at app startup
+@main
+struct MyApp {
+    static func main() async throws {
+        // Configure database
+        try await prepareDependencies {
+            $0.defaultDatabase = try await Database.Pool(
+                configuration: .fromEnvironment()
+            )
+        }
+        
+        // Run migrations
+        @Dependency(\.defaultDatabase) var db
+        
+        var migrator = Database.Migrator()
+        migrator.registerMigration("create_users_table") { db in
+            try await CreateUsersTable().apply(db)
+        }
+        
+        try await migrator.migrate(db)
+        
+        // Start your app...
+    }
+}
 ```
 
 ## Testing
@@ -197,7 +262,7 @@ import Records
 import RecordsTestSupport
 import Dependencies
 
-@Suite("User Tests", .dependency(\\.database, try Database.TestDatabase()))
+@Suite("User Tests", .dependency(\.database, Database.TestDatabase.withSchema()))
 struct UserTests {
     @Dependency(\\.database) var db
     
