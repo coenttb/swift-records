@@ -18,7 +18,7 @@ struct ConfigurationTests {
         
         #expect(config.host == "localhost")
         #expect(config.port == 5432)
-        #expect(config.database == "database-postgres-dev")
+        #expect(config.database == "swift-records-development")
         #expect(config.username == "admin")
         #expect(config.password == "")
     }

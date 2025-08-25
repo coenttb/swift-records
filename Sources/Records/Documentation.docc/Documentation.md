@@ -1,13 +1,66 @@
-# ``swift-records``
+# ``Records``
 
-<!--@START_MENU_TOKEN@-->Summary<!--@END_MENU_TOKEN@-->
+High-level database abstraction layer for PostgreSQL in Swift.
 
 ## Overview
 
-<!--@START_MENU_TOKEN@-->Text<!--@END_MENU_TOKEN@-->
+Swift Records provides a type-safe, high-level interface for PostgreSQL databases with connection pooling, transactions, and migrations. Built on [StructuredQueries](https://github.com/pointfreeco/swift-structured-queries) and [PostgresNIO](https://github.com/vapor/postgres-nio).
+
+### Quick Start
+
+```swift
+import Records
+import Dependencies
+
+// 1. Configure database at app startup
+try await prepareDependencies {
+    $0.defaultDatabase = try await Database.Pool(
+        configuration: .fromEnvironment(),
+        minConnections: 5,
+        maxConnections: 20
+    )
+}
+
+// 2. Use in your code
+struct UserService {
+    @Dependency(\.defaultDatabase) var db
+    
+    func fetchUsers() async throws -> [User] {
+        try await db.read { db in
+            try await User.fetchAll(db)
+        }
+    }
+}
+```
 
 ## Topics
 
-### <!--@START_MENU_TOKEN@-->Group<!--@END_MENU_TOKEN@-->
+### Essentials
 
-- <!--@START_MENU_TOKEN@-->``Symbol``<!--@END_MENU_TOKEN@-->
+- <doc:GettingStarted>
+- <doc:WorkingWithTransactions>
+- <doc:HandlingMigrations>
+- <doc:TestingWithRecords>
+
+### Core Types
+
+- ``Database``
+- ``Database/Queue``
+- ``Database/Pool``
+- ``Database/Configuration``
+- ``Database/Migrator``
+
+### Database Operations
+
+- ``Database/Reader``
+- ``Database/Writer``
+- ``Database/Connection/Protocol``
+
+### Transactions
+
+- ``TransactionIsolationLevel``
+
+### Testing
+
+- ``TestDatabase``
+- ``TestDatabasePool``

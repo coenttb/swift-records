@@ -64,6 +64,10 @@ extension Database {
             }
         }
         
+        public func close() async throws {
+            
+        }
+        
         deinit {
             // Note: Can't do async cleanup in deinit
             // Tests should call cleanup() explicitly or use withTestDatabase

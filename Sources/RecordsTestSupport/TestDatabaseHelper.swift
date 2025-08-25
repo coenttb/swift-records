@@ -170,6 +170,10 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
         return try await database.write(block)
     }
     
+    public func close() async throws {
+//        await manager.cleanup()
+    }
+    
     deinit {
         // Schedule cleanup to return database to pool
         // Note: Task.detached is used here intentionally:
