@@ -104,71 +104,77 @@ extension Database.Writer {
 
 // MARK: - Test Database Factory for Dependencies
 
-/// Actor to manage database creation with proper async safety
+/// Actor to manage database creation using the pool
 private actor DatabaseManager {
     private var database: Database.TestDatabase?
+    private let setupMode: Database.TestDatabaseSetupMode
     
-    func getDatabase(setupMode: LazyTestDatabase.SetupMode) async throws -> Database.TestDatabase {
+    init(setupMode: Database.TestDatabaseSetupMode) {
+        self.setupMode = setupMode
+    }
+    
+    func getDatabase() async throws -> Database.TestDatabase {
         if let database = database {
             return database
         }
         
-        let newDatabase = try await Database.testDatabase()
-        
-        switch setupMode {
-        case .empty:
-            break
-        case .withSchema:
-            try await newDatabase.createTestSchema()
-        case .withSampleData:
-            try await newDatabase.createTestSchema()
-            try await newDatabase.insertSampleData()
-        }
-        
+        // Acquire from pool
+        let mode = setupMode // Capture locally to avoid race
+        let newDatabase = try await Database.TestDatabasePool.shared.acquire(setupMode: mode)
         self.database = newDatabase
         return newDatabase
     }
     
     func cleanup() async {
         if let database = database {
-            await database.cleanup()
+            // Release back to pool
+            await Database.TestDatabasePool.shared.release(database)
+            self.database = nil
         }
     }
 }
 
 /// A wrapper that defers async database creation until first use
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
-    private let manager = DatabaseManager()
-    private let setupMode: SetupMode
+    private let manager: DatabaseManager
     
     enum SetupMode {
         case empty
         case withSchema
         case withSampleData
+        
+        var databaseSetupMode: Database.TestDatabaseSetupMode {
+            switch self {
+            case .empty: return .empty
+            case .withSchema: return .withSchema
+            case .withSampleData: return .withSampleData
+            }
+        }
     }
     
     init(setupMode: SetupMode) {
-        self.setupMode = setupMode
+        self.manager = DatabaseManager(setupMode: setupMode.databaseSetupMode)
     }
     
     public func read<T: Sendable>(
         _ block: @Sendable (any DatabaseProtocol) async throws -> T
     ) async throws -> T {
-        let database = try await manager.getDatabase(setupMode: setupMode)
+        let database = try await manager.getDatabase()
         return try await database.read(block)
     }
     
     public func write<T: Sendable>(
         _ block: @Sendable (any DatabaseProtocol) async throws -> T
     ) async throws -> T {
-        let database = try await manager.getDatabase(setupMode: setupMode)
+        let database = try await manager.getDatabase()
         return try await database.write(block)
     }
     
     deinit {
-        // Note: Can't do async cleanup in deinit
-        // The LazyTestDatabase will be cleaned up when the test suite ends
-        // and the Database.TestDatabase's cleanup will happen in its deinit
+        // Schedule cleanup to return database to pool
+        Task.detached { [manager] in
+            await manager.cleanup()
+        }
     }
 }
 

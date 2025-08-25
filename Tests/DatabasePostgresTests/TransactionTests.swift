@@ -9,8 +9,7 @@ import Dependencies
 @Suite(
     "Transaction Management",
     .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema()),
-    .serialized
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
 )
 struct TransactionTests {
     

@@ -36,20 +36,25 @@ extension Database {
             guard shouldCleanup else { return }
             
             do {
-                // Drop the schema and close connection
+                // Drop the schema first
                 try await wrapped.write { db in
                     try await db.execute("DROP SCHEMA IF EXISTS \(schemaName) CASCADE")
                 }
-                
-                // Close the underlying connection if it's a Queue
+            } catch {
+                // Ignore schema drop errors
+                print("Warning: Failed to drop test schema \(schemaName): \(error)")
+            }
+            
+            // Always try to close the connection, even if schema drop failed
+            do {
                 if let queue = wrapped as? Database.Queue {
                     try await queue.close()
                 } else if let pool = wrapped as? Database.Pool {
                     try await pool.close()
                 }
             } catch {
-                // Ignore cleanup errors in tests
-                print("Warning: Failed to cleanup test schema \(schemaName): \(error)")
+                // Ignore close errors
+                print("Warning: Failed to close connection: \(error)")
             }
         }
         

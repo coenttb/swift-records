@@ -7,8 +7,7 @@ import DependenciesTestSupport
 @Suite(
     "Integration Tests",
     .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema()),
-    .serialized
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
 )
 struct IntegrationTests {
     @Test

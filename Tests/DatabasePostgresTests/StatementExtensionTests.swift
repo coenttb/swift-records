@@ -7,10 +7,9 @@ import DependenciesTestSupport
 import Dependencies
 
 @Suite(
-    "Statement Extensions",
+    "Statement Extensions Old",
     .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema()),
-    .serialized
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
 )
 struct StatementExtensionTests {
     
