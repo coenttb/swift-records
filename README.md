@@ -214,7 +214,7 @@ try await db.withTransaction { db in
 ```swift
 // Define migrations
 struct CreateUsersTable {
-    func apply(_ db: any DatabaseProtocol) async throws {
+    func apply(_ db: any Database.Connection.`Protocol`) async throws {
         try await db.execute("""
             CREATE TABLE users (
                 id SERIAL PRIMARY KEY,

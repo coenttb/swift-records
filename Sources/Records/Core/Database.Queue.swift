@@ -76,7 +76,7 @@ extension Database {
         ///
         /// Although this is a read method, Queue executes all operations
         /// on the same connection serially.
-        public func read<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
+        public func read<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             let db = Database.Connection(connection, logger: logger)
             return try await block(db)
         }
@@ -85,7 +85,7 @@ extension Database {
         ///
         /// Write operations are executed on the same connection as reads,
         /// ensuring serial execution.
-        public func write<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
+        public func write<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             let db = Database.Connection(connection, logger: logger)
             return try await block(db)
         }

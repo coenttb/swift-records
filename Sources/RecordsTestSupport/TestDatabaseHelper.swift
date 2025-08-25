@@ -157,14 +157,14 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     }
     
     public func read<T: Sendable>(
-        _ block: @Sendable (any DatabaseProtocol) async throws -> T
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         let database = try await manager.getDatabase()
         return try await database.read(block)
     }
     
     public func write<T: Sendable>(
-        _ block: @Sendable (any DatabaseProtocol) async throws -> T
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         let database = try await manager.getDatabase()
         return try await database.write(block)

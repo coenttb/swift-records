@@ -26,20 +26,20 @@ struct DatabaseMigration {
 
 extension DatabaseMigration {
     /// Fetch all applied migration identifiers
-    static func fetchAppliedIdentifiers(_ db: any DatabaseProtocol) async throws -> Set<String> {
+    static func fetchAppliedIdentifiers(_ db: any Database.Connection.`Protocol`) async throws -> Set<String> {
         let migrations = try await DatabaseMigration.fetchAll(db)
         return Set(migrations.map { $0.identifier })
     }
     
     /// Record a migration as applied
-    static func recordMigration(identifier: String, db: any DatabaseProtocol) async throws {
+    static func recordMigration(identifier: String, db: any Database.Connection.`Protocol`) async throws {
         try await DatabaseMigration.insert {
             DatabaseMigration(identifier: identifier)
         }.execute(db)
     }
     
     /// Check if a specific migration has been applied
-    static func hasApplied(identifier: String, db: any DatabaseProtocol) async throws -> Bool {
+    static func hasApplied(identifier: String, db: any Database.Connection.`Protocol`) async throws -> Bool {
         let migration = try await DatabaseMigration
             .where { $0.identifier == identifier }
             .fetchOne(db)

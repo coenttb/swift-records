@@ -20,7 +20,7 @@ extension Database {
         }
         
         public func read<T: Sendable>(
-            _ block: @Sendable (any DatabaseProtocol) async throws -> T
+            _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
             try await wrapped.read { db in
                 // Ensure schema is set for this connection
@@ -30,7 +30,7 @@ extension Database {
         }
         
         public func write<T: Sendable>(
-            _ block: @Sendable (any DatabaseProtocol) async throws -> T
+            _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
             try await wrapped.write { db in
                 // Ensure schema is set for this connection

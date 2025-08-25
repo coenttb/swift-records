@@ -33,7 +33,7 @@ extension Database {
     /// try await migrator.migrate(database)
     /// ```
     public struct Migrator: Sendable {
-        private var migrations: [(identifier: String, migrate: @Sendable (any DatabaseProtocol) async throws -> Void)] = []
+        private var migrations: [(identifier: String, migrate: @Sendable (any Database.Connection.`Protocol`) async throws -> Void)] = []
         
         /// If true, the migrator recreates the whole database from scratch
         /// if it detects a change in migration definitions.
@@ -56,7 +56,7 @@ extension Database {
         public mutating func registerMigration(
             _ identifier: String,
             foreignKeyChecks: ForeignKeyChecks? = nil,
-            migrate: @escaping @Sendable (any DatabaseProtocol) async throws -> Void
+            migrate: @escaping @Sendable (any Database.Connection.`Protocol`) async throws -> Void
         ) {
             // Check for duplicate identifiers
             if migrations.contains(where: { $0.identifier == identifier }) {
@@ -100,7 +100,7 @@ extension Database {
         ///
         /// - Parameter db: A database connection.
         /// - Returns: A set of applied migration identifiers.
-        public func appliedIdentifiers(_ db: any DatabaseProtocol) async throws -> Set<String> {
+        public func appliedIdentifiers(_ db: any Database.Connection.`Protocol`) async throws -> Set<String> {
             try await fetchAppliedIdentifiers(db)
         }
         
@@ -117,7 +117,7 @@ extension Database {
         
         // MARK: - Private Methods
         
-        private func createMigrationTable(_ db: any DatabaseProtocol) async throws {
+        private func createMigrationTable(_ db: any Database.Connection.`Protocol`) async throws {
             try await db.execute("""
                 CREATE TABLE IF NOT EXISTS __database_migrations (
                     identifier TEXT PRIMARY KEY,
@@ -126,7 +126,7 @@ extension Database {
             """)
         }
         
-        private func fetchAppliedIdentifiers(_ db: any DatabaseProtocol) async throws -> Set<String> {
+        private func fetchAppliedIdentifiers(_ db: any Database.Connection.`Protocol`) async throws -> Set<String> {
             // Ensure migration table exists (for backward compatibility)
             try await db.execute("""
                 CREATE TABLE IF NOT EXISTS __database_migrations (
@@ -141,8 +141,8 @@ extension Database {
         
         private func applyMigration(
             identifier: String,
-            migrate: @Sendable (any DatabaseProtocol) async throws -> Void,
-            db: any DatabaseProtocol
+            migrate: @Sendable (any Database.Connection.`Protocol`) async throws -> Void,
+            db: any Database.Connection.`Protocol`
         ) async throws {
             // Handle foreign key checks
             let restoreForeignKeys = foreignKeyChecks == .deferred
@@ -169,13 +169,13 @@ extension Database {
             }
         }
         
-        private func hasSchemaChanges(_ db: any DatabaseProtocol, appliedIdentifiers: Set<String>) async throws -> Bool {
+        private func hasSchemaChanges(_ db: any Database.Connection.`Protocol`, appliedIdentifiers: Set<String>) async throws -> Bool {
             // Check if migrations have been removed or renamed
             let registeredIdentifiers = Set(migrations.map(\.identifier))
             return !appliedIdentifiers.isSubset(of: registeredIdentifiers)
         }
         
-        private func eraseDatabaseContent(_ db: any DatabaseProtocol) async throws {
+        private func eraseDatabaseContent(_ db: any Database.Connection.`Protocol`) async throws {
             // Drop all tables in the public schema
             try await db.execute("""
                 DO $$ 

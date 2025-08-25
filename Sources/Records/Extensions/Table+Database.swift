@@ -11,7 +11,7 @@ extension SelectStatement where QueryValue == (), Joins == () {
     /// - Parameter db: A database connection.
     /// - Returns: An array of all values decoded from the database.
     @inlinable
-    public func fetchAll(_ db: any DatabaseProtocol) async throws -> [From.QueryOutput] 
+    public func fetchAll(_ db: any Database.Connection.`Protocol`) async throws -> [From.QueryOutput] 
     where From: QueryRepresentable {
         // Use selectStar() to select all columns from the From table
         // This returns Select<From, From, ()> where QueryValue = From
@@ -26,7 +26,7 @@ extension SelectStatement where QueryValue == (), Joins == () {
     /// - Parameter db: A database connection.
     /// - Returns: A single value decoded from the database.
     @inlinable
-    public func fetchOne(_ db: any DatabaseProtocol) async throws -> From.QueryOutput?
+    public func fetchOne(_ db: any Database.Connection.`Protocol`) async throws -> From.QueryOutput?
     where From: QueryRepresentable {
         // Use selectStar() to select all columns from the From table
         let query = self.selectStar().limit(1)
@@ -47,7 +47,7 @@ extension Table where Self: QueryRepresentable, Self.QueryOutput == Self {
     /// - Parameter db: A database connection.
     /// - Returns: An array of all records in the table.
     @inlinable
-    public static func fetchAll(_ db: any DatabaseProtocol) async throws -> [Self] {
+    public static func fetchAll(_ db: any Database.Connection.`Protocol`) async throws -> [Self] {
         // Use selectStar() to select all columns from the table
         // This matches the pattern used in SharingGRDB
         let query = Self.all.selectStar()
@@ -64,7 +64,7 @@ extension Table where Self: QueryRepresentable, Self.QueryOutput == Self {
     /// - Parameter db: A database connection.
     /// - Returns: The first record in the table, or nil if empty.
     @inlinable
-    public static func fetchOne(_ db: any DatabaseProtocol) async throws -> Self? {
+    public static func fetchOne(_ db: any Database.Connection.`Protocol`) async throws -> Self? {
         // Use selectStar() and limit to 1
         let query = Self.all.selectStar().limit(1)
         return try await query.fetchOne(db)
@@ -80,7 +80,7 @@ extension Table where Self: QueryRepresentable, Self.QueryOutput == Self {
     /// - Parameter db: A database connection.
     /// - Returns: The number of records in the table.
     @inlinable
-    public static func fetchCount(_ db: any DatabaseProtocol) async throws -> Int {
+    public static func fetchCount(_ db: any Database.Connection.`Protocol`) async throws -> Int {
         // Use the existing fetchCount extension on SelectStatement
         try await Self.all.asSelect().fetchCount(db)
     }

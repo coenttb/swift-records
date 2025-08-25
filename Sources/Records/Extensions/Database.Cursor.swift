@@ -77,9 +77,9 @@ extension Database.Cursor {
     }
 }
 
-// MARK: - DatabaseProtocol Extension
+// MARK: - Database.Connection.`Protocol` Extension
 
-extension DatabaseProtocol {
+extension Database.Connection.`Protocol` {
     /// Returns a cursor for the given statement.
     func fetchCursor<QueryValue: QueryRepresentable>(
         _ statement: some Statement<QueryValue>

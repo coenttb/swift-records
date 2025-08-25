@@ -32,7 +32,7 @@ extension Database {
     public protocol Writer: Reader, Sendable {
         /// Performs a database operation that can write.
         ///
-        /// The provided block receives a `DatabaseProtocol` instance that can be used
+        /// The provided block receives a `Database.Connection.`Protocol`` instance that can be used
         /// to execute both read and write queries. Write operations are properly
         /// serialized to prevent conflicts.
         ///
@@ -54,6 +54,6 @@ extension Database {
         ///     return result ?? 0
         /// }
         /// ```
-        func write<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T
+        func write<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T
     }
 }

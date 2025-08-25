@@ -21,7 +21,7 @@ extension Database.Writer {
     /// - Returns: The value returned by the block.
     public func withTransaction<T: Sendable>(
         isolation: TransactionIsolationLevel = .readCommitted,
-        _ block: @Sendable (any DatabaseProtocol) async throws -> T
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         try await write { db in
             try await db.execute("BEGIN ISOLATION LEVEL \(isolation.rawValue)")
@@ -52,7 +52,7 @@ extension Database.Writer {
     /// - Parameter block: The operations to perform within the transaction.
     /// - Returns: The value returned by the block.
     public func withRollback<T: Sendable>(
-        _ block: @Sendable (any DatabaseProtocol) async throws -> T
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         try await write { db in
             try await db.execute("BEGIN")
@@ -95,7 +95,7 @@ extension Database.Writer {
     /// - Returns: The value returned by the block.
     public func withSavepoint<T: Sendable>(
         _ name: String,
-        _ block: @Sendable (any DatabaseProtocol) async throws -> T
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         try await write { db in
             try await db.execute("SAVEPOINT \(name)")

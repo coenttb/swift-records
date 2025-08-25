@@ -106,7 +106,7 @@ extension Database {
         ///
         /// - Parameter block: The read operation to perform.
         /// - Returns: The value returned by the block.
-        public func read<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
+        public func read<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             try await pool.withConnection { connection in
                 let db = Database.Connection(connection, logger: logger)
                 return try await block(db)
@@ -121,7 +121,7 @@ extension Database {
         ///
         /// - Parameter block: The write operation to perform.
         /// - Returns: The value returned by the block.
-        public func write<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
+        public func write<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             try await writeSerializer.perform {
                 try await pool.withConnection { connection in
                     let db = Database.Connection(connection, logger: logger)

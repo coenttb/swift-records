@@ -26,7 +26,7 @@ extension Database {
     public protocol Reader: Sendable {
         /// Performs a read-only database operation.
         ///
-        /// The provided block receives a `DatabaseProtocol` instance that can be used
+        /// The provided block receives a `Database.Connection.`Protocol`` instance that can be used
         /// to execute queries. The block's return value is returned from this method.
         ///
         /// - Parameter block: An async closure that performs database operations.
@@ -39,6 +39,8 @@ extension Database {
         ///     try await User.fetchCount(db)
         /// }
         /// ```
-        func read<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T
+        func read<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T
+        
+        func close() async throws
     }
 }

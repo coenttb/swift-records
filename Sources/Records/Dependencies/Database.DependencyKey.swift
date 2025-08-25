@@ -48,7 +48,7 @@ extension DependencyValues {
 extension Database {
     /// A placeholder database that reports an error when used.
     fileprivate struct Unconfigured: Writer {
-        func read<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
+        func read<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             fatalError("""
                 The defaultDatabase dependency has not been configured.
                 
@@ -68,8 +68,12 @@ extension Database {
                 """)
         }
         
-        func write<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
+        func write<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             try await read(block)
+        }
+        
+        func close() async throws {
+            fatalError()
         }
     }
 }

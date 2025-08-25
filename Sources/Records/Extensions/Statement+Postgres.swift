@@ -17,7 +17,7 @@ extension Statement {
     ///
     /// - Parameter db: A database connection.
     @inlinable
-    public func execute(_ db: any DatabaseProtocol) async throws where QueryValue == () {
+    public func execute(_ db: any Database.Connection.`Protocol`) async throws where QueryValue == () {
         try await db.execute(self)
     }
     
@@ -39,7 +39,7 @@ extension Statement {
     /// - Parameter db: A database connection.
     /// - Returns: An array of all values decoded from the database.
     @inlinable
-    public func fetchAll(_ db: any DatabaseProtocol) async throws -> [QueryValue.QueryOutput]
+    public func fetchAll(_ db: any Database.Connection.`Protocol`) async throws -> [QueryValue.QueryOutput]
     where QueryValue: QueryRepresentable {
         try await db.fetchAll(self)
     }
@@ -64,7 +64,7 @@ extension Statement {
     /// - Parameter db: A database connection.
     /// - Returns: A single value decoded from the database.
     @inlinable
-    public func fetchOne(_ db: any DatabaseProtocol) async throws -> QueryValue.QueryOutput?
+    public func fetchOne(_ db: any Database.Connection.`Protocol`) async throws -> QueryValue.QueryOutput?
     where QueryValue: QueryRepresentable {
         try await db.fetchOne(self)
     }
@@ -76,7 +76,7 @@ extension SelectStatement where QueryValue == (), Joins == () {
     /// - Parameter db: A database connection.
     /// - Returns: The number of rows fetched by the query.
     @inlinable
-    public func fetchCount(_ db: any DatabaseProtocol) async throws -> Int {
+    public func fetchCount(_ db: any Database.Connection.`Protocol`) async throws -> Int {
         let query = asSelect().count()
         return try await query.fetchOne(db) ?? 0
     }
