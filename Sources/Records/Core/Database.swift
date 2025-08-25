@@ -31,12 +31,13 @@ import Foundation
 /// struct MyApp {
 ///     static func main() async throws {
 ///         // Configure database at startup
-///         try await prepareDependencies {
-///             $0.defaultDatabase = try await Database.Pool(
+///         let database = try await Database.Pool(
 ///                 configuration: .fromEnvironment(),
 ///                 minConnections: 5,
 ///                 maxConnections: 20
 ///             )
+///         try await prepareDependencies {
+///             $0.defaultDatabase = database
 ///         }
 ///         
 ///         // Run your app
@@ -89,16 +90,22 @@ import Foundation
 ///
 /// ```swift
 /// // Development/Testing
-/// $0.defaultDatabase = try await Database.Queue(
+/// let db = try await Database.Queue(
 ///     configuration: .fromEnvironment()
 /// )
+/// prepareDependencies {
+///     $0.defaultDatabase = db
+/// }
 ///
 /// // Production
-/// $0.defaultDatabase = try await Database.Pool(
+/// let db = try await Database.Pool(
 ///     configuration: .fromEnvironment(),
 ///     minConnections: 5,
 ///     maxConnections: 20
 /// )
+/// prepareDependencies {
+///     $0.defaultDatabase = db
+/// }
 /// ```
 ///
 /// ## Error Handling

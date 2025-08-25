@@ -22,16 +22,18 @@ extension Database {
     ///
     /// ```swift
     /// // Configure at app startup
-    /// try await prepareDependencies {
-    ///     $0.defaultDatabase = try await Database.Queue(
-    ///         configuration: .fromEnvironment()
-    ///     )
+    /// let db = try await Database.Queue(
+    ///     configuration: .fromEnvironment()
+    /// )
+    ///
+    /// prepareDependencies {
+    ///     $0.defaultDatabase = db
     /// }
     ///
     /// // Use in your app
-    /// @Dependency(\.defaultDatabase) var db
+    /// @Dependency(\.defaultDatabase) var database
     ///
-    /// let users = try await db.read { db in
+    /// let users = try await database.read { db in
     ///     try await User.fetchAll(db)
     /// }
     /// ```

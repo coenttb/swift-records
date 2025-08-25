@@ -23,19 +23,22 @@ extension Database {
     ///
     /// ```swift
     /// // Configure at app startup
-    /// try await prepareDependencies {
-    ///     $0.defaultDatabase = try await Database.Pool(
-    ///         configuration: .fromEnvironment(),
-    ///         minConnections: 5,
-    ///         maxConnections: 20
-    ///     )
+    /// let db = try await Database.Pool(
+    ///     configuration: .fromEnvironment(),
+    ///     minConnections: 5,
+    ///     maxConnections: 20
+    /// )
+    ///
+    /// prepareDependencies {
+    ///     $0.defaultDatabase = db
     /// }
     ///
     /// // Concurrent reads are supported
-    /// async let users = db.read { db in
+    /// @Dependency(\.defaultDatabase) var database
+    /// async let users = database.read { db in
     ///     try await User.fetchAll(db)
     /// }
-    /// async let posts = db.read { db in
+    /// async let posts = database.read { db in
     ///     try await Post.fetchAll(db)
     /// }
     /// let (allUsers, allPosts) = try await (users, posts)

@@ -30,12 +30,14 @@ import Dependencies
 struct MyApp {
     static func main() async throws {
         // Configure database
-        try await prepareDependencies {
-            $0.defaultDatabase = try await Database.Pool(
-                configuration: .fromEnvironment(),
-                minConnections: 5,
-                maxConnections: 20
-            )
+        let db = try await Database.Pool(
+            configuration: .fromEnvironment(),
+            minConnections: 5,
+            maxConnections: 20
+        )
+        
+        prepareDependencies {
+            $0.defaultDatabase = db
         }
         
         // Run your app
@@ -54,9 +56,13 @@ Choose the right connection strategy for your needs:
 - Single-user scenarios
 
 ```swift
-$0.defaultDatabase = try await Database.Queue(
+let db = try await Database.Queue(
     configuration: .fromEnvironment()
 )
+
+prepareDependencies {
+    $0.defaultDatabase = db
+}
 ```
 
 ### Use Pool for:
@@ -65,11 +71,15 @@ $0.defaultDatabase = try await Database.Queue(
 - High concurrency
 
 ```swift
-$0.defaultDatabase = try await Database.Pool(
+let db = try await Database.Pool(
     configuration: .fromEnvironment(),
     minConnections: 5,
     maxConnections: 20
 )
+
+prepareDependencies {
+    $0.defaultDatabase = db
+}
 ```
 
 ## Basic Operations

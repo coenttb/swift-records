@@ -13,12 +13,14 @@ import Records
 import Dependencies
 
 // 1. Configure database at app startup
-try await prepareDependencies {
-    $0.defaultDatabase = try await Database.Pool(
-        configuration: .fromEnvironment(),
-        minConnections: 5,
-        maxConnections: 20
-    )
+let db = try await Database.Pool(
+    configuration: .fromEnvironment(),
+    minConnections: 5,
+    maxConnections: 20
+)
+
+prepareDependencies {
+    $0.defaultDatabase = db
 }
 
 // 2. Use in your code

@@ -66,14 +66,15 @@ Apply migrations at application startup:
 struct MyApp {
     static func main() async throws {
         // Configure database
-        try await prepareDependencies {
-            $0.defaultDatabase = try await Database.Pool(
-                configuration: .fromEnvironment()
-            )
+        let db = try await Database.Pool(
+            configuration: .fromEnvironment()
+        )
+        
+        prepareDependencies {
+            $0.defaultDatabase = db
         }
         
         // Run migrations
-        @Dependency(\.defaultDatabase) var db
         let migrator = Database.Migrator.appMigrations()
         try await migrator.migrate(db)
         
@@ -393,14 +394,15 @@ extension Database.Migrator {
 struct TodoApp {
     static func main() async throws {
         // Setup database
-        try await prepareDependencies {
-            $0.defaultDatabase = try await Database.Pool(
-                configuration: .fromEnvironment()
-            )
+        let db = try await Database.Pool(
+            configuration: .fromEnvironment()
+        )
+        
+        prepareDependencies {
+            $0.defaultDatabase = db
         }
         
         // Run migrations
-        @Dependency(\.defaultDatabase) var db
         let migrator = Database.Migrator.todoAppMigrations()
         
         do {

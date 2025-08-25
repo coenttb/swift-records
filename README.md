@@ -68,28 +68,31 @@ import Dependencies
 @main
 struct MyApp {
     static func main() async throws {
-        // Configure with explicit settings
+        
+        let database = try await Database.Pool(
+            configuration: .init(
+                host: "localhost",
+                port: 5432,
+                database: "myapp",
+                username: "postgres",
+                password: "password"
+            ),
+            minConnections: 5,
+            maxConnections: 20
+        )
+        
         try await prepareDependencies {
-            $0.defaultDatabase = try await Database.Pool(
-                configuration: .init(
-                    host: "localhost",
-                    port: 5432,
-                    database: "myapp",
-                    username: "postgres",
-                    password: "password"
-                ),
-                minConnections: 5,
-                maxConnections: 20
-            )
+            $0.defaultDatabase = database
         }
         
         // Or use environment variables
+        let database = try await Database.Pool(
+            configuration: .fromEnvironment(),
+            minConnections: 5,
+            maxConnections: 20
+        )
         try await prepareDependencies {
-            $0.defaultDatabase = try await Database.Pool(
-                configuration: .fromEnvironment(),
-                minConnections: 5,
-                maxConnections: 20
-            )
+            $0.defaultDatabase = database
         }
         
         // Your app code here...
