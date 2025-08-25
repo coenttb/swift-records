@@ -220,7 +220,7 @@ struct TestDatabase {
         // Ensure tables exist
         try await setupTestTables(database)
         
-        // Clear all data
+        // Clear all data - ALWAYS truncate to ensure clean state
         try await truncateTestTables(database)
     }
     

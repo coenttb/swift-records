@@ -9,6 +9,7 @@ import Dependencies
 @Suite(
     "Database Access Patterns",
     .dependency(\.envVars, .development),
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema()),
     .serialized
 )
 struct DatabaseAccessTests {

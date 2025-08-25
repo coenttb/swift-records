@@ -9,6 +9,7 @@ import Dependencies
 @Suite(
     "Statement Extensions",
     .dependency(\.envVars, .development),
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema()),
     .serialized
 )
 struct StatementExtensionTests {
@@ -17,8 +18,6 @@ struct StatementExtensionTests {
     func testStatementExecute() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             
             // Test execute with insert statement
@@ -47,8 +46,6 @@ struct StatementExtensionTests {
     func testStatementFetchAll() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             try await TestDatabase.insertSampleData(database)
             
@@ -70,8 +67,6 @@ struct StatementExtensionTests {
     func testStatementFetchOne() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             try await TestDatabase.insertSampleData(database)
             
@@ -95,8 +90,6 @@ struct StatementExtensionTests {
     func testSelectStatementFetchCount() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             try await TestDatabase.insertSampleData(database)
             
@@ -126,8 +119,6 @@ struct StatementExtensionTests {
     func testTableAllPattern() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             try await TestDatabase.insertSampleData(database)
             
@@ -157,8 +148,6 @@ struct StatementExtensionTests {
     func testComplexQueries() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             try await TestDatabase.insertSampleData(database)
             
@@ -194,8 +183,6 @@ struct StatementExtensionTests {
     func testUpdateAndDelete() async throws {
         do {
             let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
             try await TestDatabase.prepareForTest(database)
             try await TestDatabase.insertSampleData(database)
             
