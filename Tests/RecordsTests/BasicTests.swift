@@ -1,5 +1,5 @@
 import Testing
-import DatabasePostgresTestSupport
+import RecordsTestingSupport
 import Dependencies
 import DependenciesTestSupport
 

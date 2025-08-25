@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import DatabasePostgresTestSupport
+import RecordsTestingSupport
 import DependenciesTestSupport
 import Dependencies
 

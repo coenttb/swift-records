@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "database-postgres",
+    name: "swift-records",
     platforms: [
         .iOS(.v13),
         .macOS(.v10_15),
@@ -12,27 +12,29 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "DatabasePostgres",
-            targets: ["DatabasePostgres"]
+            name: "Records",
+            targets: ["Records"]
         ),
         .library(
-            name: "DatabasePostgresTestSupport",
-            targets: ["DatabasePostgresTestSupport"]
+            name: "RecordsTestingSupport",
+            targets: ["RecordsTestingSupport"]
         )
     ],
     dependencies: [
         .package(url: "https://github.com/coenttb/swift-structured-queries-postgres", from: "0.1.0"),
         .package(url: "https://github.com/pointfreeco/swift-structured-queries", from: "0.13.0"),
+        .package(url: "https://github.com/vapor/postgres-nio", from: "1.21.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.0"),
         .package(url: "https://github.com/coenttb/swift-environment-variables", from: "0.0.1"),
         .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.5.0")
     ],
     targets: [
         .target(
-            name: "DatabasePostgres",
+            name: "Records",
             dependencies: [
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
                 .product(name: "StructuredQueries", package: "swift-structured-queries"),
+                .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "EnvironmentVariables", package: "swift-environment-variables"),
                 .product(name: "IssueReporting", package: "xctest-dynamic-overlay")
@@ -40,19 +42,19 @@ let package = Package(
             exclude: ["Testing"]
         ),
         .target(
-            name: "DatabasePostgresTestSupport",
+            name: "RecordsTestingSupport",
             dependencies: [
-                "DatabasePostgres",
+                "Records",
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
                 .product(name: "StructuredQueries", package: "swift-structured-queries"),
                 .product(name: "Dependencies", package: "swift-dependencies")
             ]
         ),
         .testTarget(
-            name: "DatabasePostgresTests",
+            name: "RecordsTests",
             dependencies: [
-                "DatabasePostgres",
-                "DatabasePostgresTestSupport",
+                "Records",
+                "RecordsTestingSupport",
                 .product(name: "DependenciesTestSupport", package: "swift-dependencies")
             ]
         )

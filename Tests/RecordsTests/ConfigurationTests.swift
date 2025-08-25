@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import DatabasePostgres
+@testable import Records
 import Dependencies
 import EnvironmentVariables
 import DependenciesTestSupport
@@ -28,7 +28,7 @@ struct ConfigurationTests {
         let config = try Database.Configuration.fromEnvironment(connectionStrategy: .single)
         
         do {
-            let queue = try await Database.Queue(configuration: config.postgresConfiguration)
+            let queue = try await Database.Queue(configuration: config)
             
             // Test that we can perform operations
             try await queue.write { db in
@@ -46,7 +46,7 @@ struct ConfigurationTests {
         let config = try Database.Configuration.fromEnvironment(connectionStrategy: .pool(min: 2, max: 5))
         
         let pool = try await Database.Pool(
-            configuration: config.postgresConfiguration,
+            configuration: config,
             minConnections: 2,
             maxConnections: 5
         )
@@ -59,8 +59,8 @@ struct ConfigurationTests {
         try await pool.close()
     }
     
-    @Test("Configuration passes through to PostgresQueryDatabase")
-    func testConfigurationPassthrough() async throws {
+    @Test("Configuration stores values correctly")
+    func testConfigurationValues() async throws {
         let config = Database.Configuration(
             host: "localhost",
             port: 5432,
@@ -72,13 +72,11 @@ struct ConfigurationTests {
             connectionTimeout: 10
         )
         
-        let pgConfig = config.postgresConfiguration
-        
-        #expect(pgConfig.host == "localhost")
-        #expect(pgConfig.port == 5432)
-        #expect(pgConfig.database == "database-postgres-dev")
-        #expect(pgConfig.username == "admin")
-        #expect(pgConfig.password == nil)
+        #expect(config.host == "localhost")
+        #expect(config.port == 5432)
+        #expect(config.database == "database-postgres-dev")
+        #expect(config.username == "admin")
+        #expect(config.password == nil)
     }
     
     @Test("Connection strategies")
@@ -92,14 +90,12 @@ struct ConfigurationTests {
             connectionStrategy: .single
         )
         
-        let singlePgConfig = singleConfig.postgresConfiguration
-        
-        switch singlePgConfig.pooling {
-        case .disabled:
+        switch singleConfig.connectionStrategy {
+        case .single:
             // Expected
             break
-        case .enabled:
-            Issue.record("Single connection strategy should disable pooling")
+        case .pool:
+            Issue.record("Expected single connection strategy")
         }
         
         // Test pool connection strategy
@@ -111,12 +107,10 @@ struct ConfigurationTests {
             connectionStrategy: .pool(min: 3, max: 10)
         )
         
-        let poolPgConfig = poolConfig.postgresConfiguration
-        
-        switch poolPgConfig.pooling {
-        case .disabled:
-            Issue.record("Pool connection strategy should enable pooling")
-        case let .enabled(min, max):
+        switch poolConfig.connectionStrategy {
+        case .single:
+            Issue.record("Expected pool connection strategy")
+        case let .pool(min, max):
             #expect(min == 3)
             #expect(max == 10)
         }

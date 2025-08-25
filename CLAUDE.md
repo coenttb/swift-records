@@ -1,7 +1,7 @@
-# Database-Postgres: SharingGRDB-Style API for PostgreSQL
+# Swift-Records: SharingGRDB-Style API for PostgreSQL
 
 ## Project Overview
-A lightweight Swift package that provides SharingGRDB-like APIs for PostgreSQL by wrapping swift-structured-queries-postgres. This package acts as an elegant bridge between structured-queries statements and PostgreSQL execution, without reimplementing core database functionality.
+A lightweight Swift package that provides SharingGRDB-like APIs for PostgreSQL by wrapping swift-structured-queries-postgres. Swift-Records acts as an elegant bridge between structured-queries statements and PostgreSQL execution, without reimplementing core database functionality.
 
 ## Key Design Principles
 1. **Minimal Wrapper**: All database operations delegate to swift-structured-queries-postgres
@@ -12,38 +12,38 @@ A lightweight Swift package that provides SharingGRDB-like APIs for PostgreSQL b
 
 ## Functionality to Move from swift-structured-queries-postgres
 
-The following components should be moved to database-postgres to keep swift-structured-queries-postgres as a pure integration library:
+The following components should be moved to swift-records to keep swift-structured-queries-postgres as a pure integration library:
 
 ### 1. **DatabaseService & Configuration**
-- Move `DatabaseService.swift` entirely to database-postgres
+- Move `DatabaseService.swift` entirely to swift-records
 - Move `DatabaseConfiguration` struct with environment variable support
 - This provides higher-level abstractions that aren't core to the PostgresNIO integration
 
 ### 2. **Connection Pooling**
-- Move `ConnectionPool` actor to database-postgres
+- Move `ConnectionPool` actor to swift-records
 - Move `DatabaseConnectionPool` implementation
 - Keep only basic single-connection support in swift-structured-queries-postgres
 - Pooling is an application-level concern, not a core integration feature
 
 ### 3. **Transaction Management**
-- Move `withTransaction` and `withRollback` methods to database-postgres
+- Move `withTransaction` and `withRollback` methods to swift-records
 - Move `TransactionIsolationLevel` enum
 - These provide convenience APIs on top of raw SQL execution
 
 ### 4. **Database Read/Write Pattern**
-- Move the `read`/`write` pattern implementation to database-postgres
+- Move the `read`/`write` pattern implementation to swift-records
 - This is a GRDB-style API pattern, not core PostgresNIO integration
 
 ### 5. **Migration System**
-- Any migration-related code should live in database-postgres
+- Any migration-related code should live in swift-records
 - This is an application-level feature, not core integration
 
 ### 6. **Cursor Management**
-- Move high-level cursor APIs to database-postgres
+- Move high-level cursor APIs to swift-records
 - Keep only basic PostgresQueryCursor in swift-structured-queries-postgres
 
 ### 7. **Error Types**
-- Move application-level errors (poolShuttingDown, connectionTimeout) to database-postgres
+- Move application-level errors (poolShuttingDown, connectionTimeout) to swift-records
 - Keep only PostgreSQL-specific errors in swift-structured-queries-postgres
 
 ## What Remains in swift-structured-queries-postgres
@@ -175,7 +175,7 @@ let database = try await DatabasePool(configuration: config)
 
 3. **Connection Pooling**:
    - Basic pooling exists in swift-structured-queries-postgres
-   - May need to move more sophisticated pooling logic to database-postgres
+   - May need to move more sophisticated pooling logic to swift-records
 
 4. **Error Handling**:
    - Need to properly handle and wrap PostgreSQL errors
@@ -207,7 +207,7 @@ let database = try await DatabasePool(configuration: config)
 ## Testing
 
 ### Test Environment
-- **Database**: database-postgres-dev
+- **Database**: swift-records-dev
 - **User**: Admin (no password)
 - **Host**: localhost
 - **Port**: 5432
@@ -217,9 +217,9 @@ let database = try await DatabasePool(configuration: config)
 - **BasicTests.swift**: Simple compilation tests
 - **IntegrationTests.swift**: Demonstrates Table usage patterns (needs real database to run)
 
-### Test Plan for database-postgres
+### Test Plan for swift-records
 
-The tests should focus on the functionality that database-postgres adds on top of swift-structured-queries-postgres, not re-test the underlying PostgreSQL integration.
+The tests should focus on the functionality that swift-records adds on top of swift-structured-queries-postgres, not re-test the underlying PostgreSQL integration.
 
 #### 1. Database Access Pattern Tests (`DatabaseAccessTests.swift`)
 Test the read/write pattern and actor-based concurrency:
@@ -300,7 +300,7 @@ Test SharingGRDB API patterns work correctly:
 - Use `#expect` from Swift Testing framework
 - Mock PostgresQueryDatabase where possible to avoid actual DB connections
 - For integration tests, use a real PostgreSQL instance (can be Docker-based)
-- Focus on the value database-postgres adds, not re-testing structured-queries
+- Focus on the value swift-records adds, not re-testing structured-queries
 
 ### What NOT to Test
 
@@ -573,7 +573,7 @@ func read(from database: any Database.Reader) async throws { ... }
 1. ~~Execute namespace update plan~~ ✅ Completed
 2. Fix migration system to properly track applied migrations
 3. Improve cursor implementation for memory efficiency
-4. Add comprehensive tests with real PostgreSQL database (database-postgres-dev)
+4. Add comprehensive tests with real PostgreSQL database (swift-records-dev)
 5. Document migration path from SharingGRDB
 
 ### Future Enhancements

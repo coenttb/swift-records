@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import DatabasePostgresTestSupport
+import RecordsTestingSupport
 import EnvironmentVariables
 
 extension URL {

@@ -2,7 +2,6 @@ import Dependencies
 import EnvironmentVariables
 import Foundation
 import PostgresNIO
-import StructuredQueriesPostgres
 
 // MARK: - Database.Configuration
 
@@ -125,26 +124,6 @@ extension Database {
             )
         }
         
-        /// Convert to PostgresQueryDatabase.Configuration
-        package var postgresConfiguration: PostgresQueryDatabase.Configuration {
-            let pooling: PostgresQueryDatabase.Configuration.PoolingStrategy
-            switch connectionStrategy {
-            case .single:
-                pooling = .disabled
-            case let .pool(min, max):
-                pooling = .enabled(min: min, max: max)
-            }
-            
-            return PostgresQueryDatabase.Configuration(
-                host: host,
-                port: port,
-                database: database,
-                username: username,
-                password: password,
-                tls: tls,
-                pooling: pooling
-            )
-        }
     }
 }
 

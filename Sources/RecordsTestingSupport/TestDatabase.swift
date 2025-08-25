@@ -93,7 +93,7 @@ extension Database {
         
         // Create connection
         let config = try configuration ?? Configuration.fromEnvironment()
-        let database = try await Database.Queue(configuration: config.postgresConfiguration)
+        let database = try await Database.Queue(configuration: config)
         
         // Create and use test schema
         try await database.write { db in
@@ -123,7 +123,7 @@ extension Database {
             connectionStrategy: .pool(min: minConnections, max: maxConnections)
         )
         let pool = try await Database.Pool(
-            configuration: config.postgresConfiguration,
+            configuration: config,
             minConnections: minConnections,
             maxConnections: maxConnections
         )

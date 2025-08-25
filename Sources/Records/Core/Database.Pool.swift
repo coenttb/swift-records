@@ -1,5 +1,4 @@
 import Foundation
-import StructuredQueriesPostgres
 import PostgresNIO
 import Logging
 
@@ -11,26 +10,32 @@ extension Database {
     /// `Database.Pool` manages multiple PostgreSQL connections and provides concurrent read access
     /// while serializing write operations.
     public final class Pool: Writer, Sendable {
-        private let postgres: PostgresQueryDatabase
+        private let pool: ConnectionPool
         private let writeSerializer = WriteSerializer()
         private let closeState = CloseState()
+        private let logger: Logger
         
         /// Initialize with a PostgreSQL configuration with pooling enabled.
         public init(
-            configuration: PostgresQueryDatabase.Configuration,
+            configuration: Configuration,
             minConnections: Int = 2,
             maxConnections: Int = 10
         ) async throws {
-            let poolingConfig = PostgresQueryDatabase.Configuration(
+            let pgConfig = PostgresConnection.Configuration(
                 host: configuration.host,
                 port: configuration.port,
-                database: configuration.database,
                 username: configuration.username,
                 password: configuration.password,
-                tls: configuration.tls,
-                pooling: .enabled(min: minConnections, max: maxConnections)
+                database: configuration.database,
+                tls: configuration.tls
             )
-            self.postgres = try await PostgresQueryDatabase.configure(poolingConfig)
+            
+            self.logger = Logger(label: "records.pool")
+            self.pool = try await ConnectionPool(
+                configuration: pgConfig,
+                minConnections: minConnections,
+                maxConnections: maxConnections
+            )
         }
         
         /// Initialize with environment variables and pooling enabled.
@@ -38,8 +43,8 @@ extension Database {
             minConnections: Int = 2,
             maxConnections: Int = 10
         ) async throws {
-            let config = PostgresQueryDatabase.Configuration.fromEnvironment(
-                pooling: .enabled(min: minConnections, max: maxConnections)
+            let config = try Configuration.fromEnvironment(
+                connectionStrategy: .pool(min: minConnections, max: maxConnections)
             )
             try await self.init(
                 configuration: config,
@@ -51,16 +56,20 @@ extension Database {
         /// Performs a read-only database operation.
         /// Multiple reads can execute concurrently.
         public func read<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
-            let db = Database.Connection(postgres)
-            return try await block(db)
+            try await pool.withConnection { connection in
+                let db = Database.Connection(connection, logger: logger)
+                return try await block(db)
+            }
         }
         
         /// Performs a database operation that can write.
         /// Write operations are serialized.
         public func write<T: Sendable>(_ block: @Sendable (any DatabaseProtocol) async throws -> T) async throws -> T {
             try await writeSerializer.perform {
-                let db = Database.Connection(postgres)
-                return try await block(db)
+                try await pool.withConnection { connection in
+                    let db = Database.Connection(connection, logger: logger)
+                    return try await block(db)
+                }
             }
         }
         
@@ -70,7 +79,7 @@ extension Database {
             guard !alreadyClosed else { return }
             
             try await writeSerializer.perform {
-                try await postgres.close()
+                try await pool.shutdown()
             }
         }
     }
