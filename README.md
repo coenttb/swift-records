@@ -297,11 +297,23 @@ let results = try await db.reader.read { db in
 When needed, you can execute raw SQL:
 
 ```swift
-try await db.writer.write { db in
-    try await db.execute("""
-        CREATE INDEX CONCURRENTLY idx_users_email 
-        ON users(email)
-    """)
+struct MaintenanceService {
+    @Dependency(\.defaultDatabase) var db
+    
+    func createEmailIndex() async throws {
+        try await db.write { db in
+            try await db.execute("""
+                CREATE INDEX CONCURRENTLY idx_users_email 
+                ON users(email)
+            """)
+        }
+    }
+    
+    func vacuumDatabase() async throws {
+        try await db.write { db in
+            try await db.execute("VACUUM ANALYZE")
+        }
+    }
 }
 ```
 
