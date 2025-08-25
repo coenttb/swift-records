@@ -63,7 +63,7 @@ extension Database.Writer {
     }
     
     /// Inserts sample data for testing
-    func insertSampleData() async throws {
+    package func insertSampleData() async throws {
         try await self.write { db in
             // Insert users
             try await db.execute("""

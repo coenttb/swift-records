@@ -1,40 +1,40 @@
 import Testing
 import Foundation
-import DatabasePostgres
-import StructuredQueries
-import StructuredQueriesPostgres
+import DatabasePostgresTestSupport
 import DependenciesTestSupport
 import Dependencies
 
 @Suite(
-    "Statement Extensions Old",
+    "Statement Extensions New",
     .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSampleData())
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
 )
-struct StatementExtensionTests {
+struct StatementExtensionTestsNew {
     @Dependency(\.defaultDatabase) var database
     
     @Test("Statement.execute(db) works correctly")
     func testStatementExecute() async throws {
-        // Test execute with insert statement  
+        // Test execute with insert statement
         try await database.write { db in
             try await User.insert {
-                User.Draft(name: "Test User New", email: "testnew@example.com", createdAt: Date())
+                User.Draft(name: "Test User", email: "test@example.com", createdAt: Date())
             }.execute(db)
         }
         
         // Verify insertion
-        let users = try await database.read { db in
-            try await User.where { $0.email == "testnew@example.com" }.asSelect().fetchAll(db)
+        let count = try await database.read { db in
+            try await User.fetchCount(db)
         }
         
-        #expect(users.count == 1)
-        #expect(users.first?.name == "Test User New")
+        #expect(count == 1)
     }
     
     @Test("Statement.fetchAll(db) returns all results")
     func testStatementFetchAll() async throws {
-        // Test fetchAll (sample data already loaded)
+        // Insert sample data
+        try await database.insertSampleData()
+        
+        // Test fetchAll using static method
         let users = try await database.read { db in
             try await User.fetchAll(db)
         }
@@ -46,6 +46,9 @@ struct StatementExtensionTests {
     
     @Test("Statement.fetchOne(db) returns single result")
     func testStatementFetchOne() async throws {
+        // Insert sample data
+        try await database.insertSampleData()
+        
         // Test fetchOne
         let user = try await database.read { db in
             try await User
@@ -60,6 +63,9 @@ struct StatementExtensionTests {
     
     @Test("SelectStatement.fetchCount(db) returns count")
     func testSelectStatementFetchCount() async throws {
+        // Insert sample data
+        try await database.insertSampleData()
+        
         // Test fetchCount using static method
         let totalCount = try await database.read { db in
             try await User.fetchCount(db)
@@ -80,7 +86,10 @@ struct StatementExtensionTests {
     
     @Test("Table.all pattern works correctly")
     func testTableAllPattern() async throws {
-        // Test the Table.all pattern
+        // Insert sample data
+        try await database.insertSampleData()
+        
+        // Test the Table.all pattern from SharingGRDB
         let allUsers = try await database.read { db in
             try await User.all.fetchAll(db)
         }
@@ -100,6 +109,9 @@ struct StatementExtensionTests {
     
     @Test("Complex queries with where clauses")
     func testComplexQueries() async throws {
+        // Insert sample data
+        try await database.insertSampleData()
+        
         // Test complex query with where and order
         let publishedPosts = try await database.read { db in
             try await Post
@@ -126,6 +138,9 @@ struct StatementExtensionTests {
     
     @Test("Update and delete operations")
     func testUpdateAndDelete() async throws {
+        // Insert sample data
+        try await database.insertSampleData()
+        
         // Test update
         try await database.write { db in
             try await User

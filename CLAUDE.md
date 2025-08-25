@@ -582,3 +582,66 @@ func read(from database: any Database.Reader) async throws { ... }
 3. Add support for PostgreSQL-specific features (arrays, JSONB, etc.)
 4. Performance optimizations for large result sets
 5. Better integration with PostgresQueryCursor for streaming results
+
+## Code Quality Cleanup Plan
+
+### 1. **Remove Dead Code**
+- **TestHelper.swift**: This entire file contains unused singleton-based test infrastructure that we've replaced with dependency injection. Should be deleted.
+- **StatementExtensionTestsNew.swift**: Should be renamed to just StatementExtensionTests.swift (remove the "New" suffix)
+- **StatementExtensionTests.swift**: The "Old" version should be deleted or merged if there are unique tests
+
+### 2. **Fix TODOs**
+- **Database.Migrator.swift line 140**: Implement proper query to fetch migration identifiers
+  - Currently returns empty array, needs to query __database_migrations table
+  - This breaks migration tracking functionality
+
+### 3. **Remove Debug Print Statements**
+- **TestDatabase.swift lines 53, 65**: Remove warning print statements or convert to proper logging
+- **ConfigurationTests.swift line 41**: Remove debug print statement
+
+### 4. **Reduce @unchecked Sendable Usage**
+- **TestDatabase.swift**: Consider if @unchecked Sendable is necessary
+- **LazyTestDatabase**: Review if @unchecked Sendable can be avoided
+- **TestDatabaseStorage**: This class should be deleted entirely
+
+### 5. **Improve Code Organization**
+- Consolidate test helpers: Merge TestDatabaseHelper.swift functionality into TestDatabase.swift
+- Remove duplicate test schema creation code (exists in both TestDatabasePool and TestDatabaseHelper)
+
+### 6. **Documentation & Comments**
+- Add proper documentation comments to public APIs
+- Remove excessive MARK comments (keep only major section dividers)
+- Add README.md with usage examples
+
+### 7. **Namespace Cleanup**
+- Consider moving test-specific code to a separate module (DatabasePostgresTestSupport)
+- This would prevent test utilities from being included in production builds
+
+### 8. **Dependency Cleanup**
+- Review if all dependencies are still needed (e.g., ConcurrencyExtras with NSLock usage)
+- Update package versions to latest stable releases
+
+### 9. **Test Suite Organization**
+- Merge StatementExtensionTests and StatementExtensionTestsNew into one file
+- Remove duplicate test coverage
+- Ensure test names are descriptive
+
+### 10. **Error Handling**
+- Replace generic error ignoring with proper error logging
+- Add specific error types for database operations
+
+### Implementation Order:
+1. Delete unused files (TestHelper.swift, duplicate test files)
+2. Fix the TODO in Database.Migrator.swift
+3. Remove print statements
+4. Consolidate test helpers
+5. Review and reduce @unchecked Sendable usage
+6. Add documentation
+7. Consider module reorganization for test support
+
+This cleanup will:
+- Reduce codebase complexity
+- Fix broken migration tracking
+- Improve maintainability
+- Ensure production code doesn't include test utilities
+- Make the API clearer for users

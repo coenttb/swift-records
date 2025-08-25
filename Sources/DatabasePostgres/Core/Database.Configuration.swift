@@ -8,7 +8,7 @@ import StructuredQueriesPostgres
 
 extension Database {
     /// Errors that can occur during configuration.
-    public enum ConfigurationError: Error, CustomStringConvertible {
+    public enum ConfigurationError: Swift.Error, CustomStringConvertible {
         case missingEnvironmentVariable(String)
         case invalidPort(String)
         
@@ -126,7 +126,7 @@ extension Database {
         }
         
         /// Convert to PostgresQueryDatabase.Configuration
-        internal var postgresConfiguration: PostgresQueryDatabase.Configuration {
+        package var postgresConfiguration: PostgresQueryDatabase.Configuration {
             let pooling: PostgresQueryDatabase.Configuration.PoolingStrategy
             switch connectionStrategy {
             case .single:

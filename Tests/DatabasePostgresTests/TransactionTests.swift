@@ -1,8 +1,6 @@
 import Testing
 import Foundation
-import DatabasePostgres
-import StructuredQueries
-import StructuredQueriesPostgres
+import DatabasePostgresTestSupport
 import DependenciesTestSupport
 import Dependencies
 

@@ -14,6 +14,10 @@ let package = Package(
         .library(
             name: "DatabasePostgres",
             targets: ["DatabasePostgres"]
+        ),
+        .library(
+            name: "DatabasePostgresTestSupport",
+            targets: ["DatabasePostgresTestSupport"]
         )
     ],
     dependencies: [
@@ -21,8 +25,7 @@ let package = Package(
         .package(url: "https://github.com/pointfreeco/swift-structured-queries", from: "0.13.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.0"),
         .package(url: "https://github.com/coenttb/swift-environment-variables", from: "0.0.1"),
-        .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.5.0"),
-        .package(url: "https://github.com/pointfreeco/swift-concurrency-extras", from: "1.3.0")
+        .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.5.0")
     ],
     targets: [
         .target(
@@ -33,14 +36,24 @@ let package = Package(
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "EnvironmentVariables", package: "swift-environment-variables"),
                 .product(name: "IssueReporting", package: "xctest-dynamic-overlay")
+            ],
+            exclude: ["Testing"]
+        ),
+        .target(
+            name: "DatabasePostgresTestSupport",
+            dependencies: [
+                "DatabasePostgres",
+                .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
+                .product(name: "StructuredQueries", package: "swift-structured-queries"),
+                .product(name: "Dependencies", package: "swift-dependencies")
             ]
         ),
         .testTarget(
             name: "DatabasePostgresTests",
             dependencies: [
                 "DatabasePostgres",
-                .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
-                .product(name: "ConcurrencyExtras", package: "swift-concurrency-extras")
+                "DatabasePostgresTestSupport",
+                .product(name: "DependenciesTestSupport", package: "swift-dependencies")
             ]
         )
     ],

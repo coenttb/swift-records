@@ -121,24 +121,22 @@ extension Database {
             try await db.execute("""
                 CREATE TABLE IF NOT EXISTS __database_migrations (
                     identifier TEXT PRIMARY KEY,
-                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    "appliedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
         }
         
         private func fetchAppliedIdentifiers(_ db: any DatabaseProtocol) async throws -> Set<String> {
-            // Check if migration table exists
+            // Ensure migration table exists (for backward compatibility)
             try await db.execute("""
                 CREATE TABLE IF NOT EXISTS __database_migrations (
                     identifier TEXT PRIMARY KEY,
-                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    "appliedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
-            // For now, return empty set since we need to implement proper row fetching
-            // This will be updated when we have better integration with the query system
-            // TODO: Implement proper query to fetch identifiers from __database_migrations table
-            return []
+            // Fetch applied migrations using the DatabaseMigration table
+            return try await DatabaseMigration.fetchAppliedIdentifiers(db)
         }
         
         private func applyMigration(
@@ -157,10 +155,8 @@ extension Database {
                 // Run the migration
                 try await migrate(db)
                 
-                // Record the migration
-                try await db.execute("""
-                    INSERT INTO __database_migrations (identifier) VALUES ('\(identifier)')
-                """)
+                // Record the migration using structured insert
+                try await DatabaseMigration.recordMigration(identifier: identifier, db: db)
                 
                 if restoreForeignKeys {
                     try await db.execute("SET session_replication_role = 'origin'")

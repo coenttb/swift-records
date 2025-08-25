@@ -37,8 +37,6 @@ struct ConfigurationTests {
             
             try await queue.close()
         } catch {
-            // Print detailed error for debugging
-            print("Detailed error: \(String(reflecting: error))")
             throw error
         }
     }

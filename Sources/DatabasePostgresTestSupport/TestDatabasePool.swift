@@ -28,7 +28,7 @@ extension Database {
         /// Acquire a test database from the pool
         func acquire(setupMode: TestDatabaseSetupMode = .withSchema) async throws -> TestDatabase {
             guard !isShuttingDown else {
-                throw TestDatabasePoolError.poolShuttingDown
+                throw Database.Error.poolShuttingDown
             }
             
             // Always create a new database with a unique schema for proper isolation
@@ -45,10 +45,10 @@ extension Database {
             case .empty:
                 break
             case .withSchema:
-                try await createTestSchema(for: database)
+                try await database.createTestSchema()
             case .withSampleData:
-                try await createTestSchema(for: database)
-                try await insertSampleData(for: database)
+                try await database.createTestSchema()
+                try await database.insertSampleData()
             }
             
             return database
@@ -105,10 +105,6 @@ private struct TestDatabaseEntry: Hashable {
     }
 }
 
-/// Errors for test database pool
-enum TestDatabasePoolError: Error {
-    case poolShuttingDown
-}
 
 // MARK: - TestDatabase Extensions for Pool
 
@@ -129,99 +125,98 @@ extension Database.TestDatabase {
             try await db.execute(dropTablesQuery)
         }
     }
-}
-
-// MARK: - Helper functions for test setup
-
-/// Creates the standard test schema for testing
-private func createTestSchema(for database: Database.TestDatabase) async throws {
-    try await database.write { db in
-        // Create users table
-        try await db.execute("""
-            CREATE TABLE users (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        // Create posts table
-        try await db.execute("""
-            CREATE TABLE posts (
-                id SERIAL PRIMARY KEY,
-                "userId" INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                "publishedAt" TIMESTAMP
-            )
-        """)
-        
-        // Create comments table
-        try await db.execute("""
-            CREATE TABLE comments (
-                id SERIAL PRIMARY KEY,
-                "postId" INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-                "userId" INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                text TEXT NOT NULL,
-                "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        // Create tags table
-        try await db.execute("""
-            CREATE TABLE tags (
-                id SERIAL PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL
-            )
-        """)
-        
-        // Create post_tags junction table
-        try await db.execute("""
-            CREATE TABLE post_tags (
-                "postId" INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-                "tagId" INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-                PRIMARY KEY ("postId", "tagId")
-            )
-        """)
+    
+    /// Creates the standard test schema for testing
+    func createTestSchema() async throws {
+        try await self.write { db in
+            // Create users table
+            try await db.execute("""
+                CREATE TABLE users (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            // Create posts table
+            try await db.execute("""
+                CREATE TABLE posts (
+                    id SERIAL PRIMARY KEY,
+                    "userId" INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    "publishedAt" TIMESTAMP
+                )
+            """)
+            
+            // Create comments table
+            try await db.execute("""
+                CREATE TABLE comments (
+                    id SERIAL PRIMARY KEY,
+                    "postId" INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                    "userId" INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    text TEXT NOT NULL,
+                    "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            // Create tags table
+            try await db.execute("""
+                CREATE TABLE tags (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL
+                )
+            """)
+            
+            // Create post_tags junction table
+            try await db.execute("""
+                CREATE TABLE post_tags (
+                    "postId" INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                    "tagId" INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                    PRIMARY KEY ("postId", "tagId")
+                )
+            """)
+        }
+    }
+    
+    /// Inserts sample data for testing
+    func insertSampleData() async throws {
+        try await self.write { db in
+            // Insert users
+            try await db.execute("""
+                INSERT INTO users (name, email, "createdAt") VALUES
+                ('Alice', 'alice@example.com', CURRENT_TIMESTAMP),
+                ('Bob', 'bob@example.com', CURRENT_TIMESTAMP)
+            """)
+            
+            // Insert posts
+            try await db.execute("""
+                INSERT INTO posts ("userId", title, content, "publishedAt") VALUES
+                (1, 'First Post', 'Hello World', CURRENT_TIMESTAMP),
+                (2, 'Second Post', 'Another post', NULL)
+            """)
+            
+            // Insert comments
+            try await db.execute("""
+                INSERT INTO comments ("postId", "userId", text, "createdAt") VALUES
+                (1, 2, 'Great post!', CURRENT_TIMESTAMP)
+            """)
+            
+            // Insert tags
+            try await db.execute("""
+                INSERT INTO tags (name) VALUES
+                ('Swift'),
+                ('Database')
+            """)
+            
+            // Insert post-tag relationships
+            try await db.execute("""
+                INSERT INTO post_tags ("postId", "tagId") VALUES
+                (1, 1),
+                (1, 2)
+            """)
+        }
     }
 }
 
-/// Inserts sample data for testing
-private func insertSampleData(for database: Database.TestDatabase) async throws {
-    try await database.write { db in
-        // Insert users
-        try await db.execute("""
-            INSERT INTO users (name, email, "createdAt") VALUES
-            ('Alice', 'alice@example.com', CURRENT_TIMESTAMP),
-            ('Bob', 'bob@example.com', CURRENT_TIMESTAMP)
-        """)
-        
-        // Insert posts
-        try await db.execute("""
-            INSERT INTO posts ("userId", title, content, "publishedAt") VALUES
-            (1, 'First Post', 'Hello World', CURRENT_TIMESTAMP),
-            (2, 'Second Post', 'Another post', NULL)
-        """)
-        
-        // Insert comments
-        try await db.execute("""
-            INSERT INTO comments ("postId", "userId", text, "createdAt") VALUES
-            (1, 2, 'Great post!', CURRENT_TIMESTAMP)
-        """)
-        
-        // Insert tags
-        try await db.execute("""
-            INSERT INTO tags (name) VALUES
-            ('Swift'),
-            ('Database')
-        """)
-        
-        // Insert post-tag relationships
-        try await db.execute("""
-            INSERT INTO post_tags ("postId", "tagId") VALUES
-            (1, 1),
-            (1, 2)
-        """)
-    }
-}

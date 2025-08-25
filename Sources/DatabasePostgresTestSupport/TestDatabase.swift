@@ -49,8 +49,7 @@ extension Database {
                     try await db.execute("DROP SCHEMA IF EXISTS \(schemaName) CASCADE")
                 }
             } catch {
-                // Ignore schema drop errors
-                print("Warning: Failed to drop test schema \(schemaName): \(error)")
+                // Ignore schema drop errors silently
             }
             
             // Always try to close the connection, even if schema drop failed
@@ -61,8 +60,7 @@ extension Database {
                     try await pool.close()
                 }
             } catch {
-                // Ignore close errors
-                print("Warning: Failed to close connection: \(error)")
+                // Ignore close errors silently
             }
         }
         
