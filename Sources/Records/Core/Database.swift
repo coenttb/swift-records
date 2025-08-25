@@ -72,6 +72,75 @@ import Foundation
 ///     }
 /// }
 /// ```
+///
+/// ## Choosing Between Queue and Pool
+///
+/// ### Use Queue when:
+/// - Developing or testing locally
+/// - Building simple applications with low concurrency
+/// - Working with SQLite or embedded databases
+/// - You want predictable, serial execution
+///
+/// ### Use Pool when:
+/// - Building production applications
+/// - Handling multiple concurrent requests
+/// - Need to scale read operations
+/// - Working with remote database servers
+///
+/// ```swift
+/// // Development/Testing
+/// $0.defaultDatabase = try await Database.Queue(
+///     configuration: .fromEnvironment()
+/// )
+///
+/// // Production
+/// $0.defaultDatabase = try await Database.Pool(
+///     configuration: .fromEnvironment(),
+///     minConnections: 5,
+///     maxConnections: 20
+/// )
+/// ```
+///
+/// ## Error Handling
+///
+/// Database operations can throw various errors that should be handled appropriately:
+///
+/// ```swift
+/// do {
+///     try await db.write { db in
+///         try await User.insert { ... }.execute(db)
+///     }
+/// } catch Database.Error.poolExhausted(let max) {
+///     // Handle connection pool exhaustion
+///     logger.error("Connection pool exhausted (max: \(max))")
+///     throw ServiceUnavailable()
+/// } catch Database.Error.connectionTimeout(let timeout) {
+///     // Handle connection timeout
+///     logger.error("Database connection timed out after \(timeout)s")
+///     throw ServiceUnavailable()
+/// } catch {
+///     // Handle other database errors
+///     logger.error("Database error: \(error)")
+///     throw error
+/// }
+/// ```
+///
+/// ### Transaction Error Handling
+///
+/// ```swift
+/// do {
+///     try await db.withTransaction(isolation: .serializable) { db in
+///         // Critical operations
+///     }
+/// } catch Database.Error.transactionFailed(let underlying) {
+///     // Handle transaction failure
+///     if isSerializationError(underlying) {
+///         // Retry the transaction
+///         return try await retryTransaction()
+///     }
+///     throw underlying
+/// }
+/// ```
 public enum Database {
     // Namespace holder - never instantiated
 }

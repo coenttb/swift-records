@@ -290,6 +290,78 @@ Using Swift 6.0's actor model ensures thread-safe database access:
 - `Database.Reader`: Read-only operations (can use multiple connections)
 - `Database.Writer`: Write operations (ensures serialization when needed)
 
+### Connection Lifecycle Management
+
+Properly manage database connections in your application lifecycle:
+
+```swift
+// For Vapor applications
+import Vapor
+import Records
+
+struct DatabaseLifecycleHandler: LifecycleHandler {
+    let database: any Database.Reader
+    
+    func shutdown(_ app: Application) {
+        app.eventLoopGroup.next().execute {
+            Task {
+                try? await database.close()
+            }
+        }
+    }
+}
+
+// In your configure function
+func configure(_ app: Application) async throws {
+    let db = try await Database.Pool(
+        configuration: .fromEnvironment(),
+        minConnections: 5,
+        maxConnections: 20
+    )
+    
+    prepareDependencies {
+        $0.defaultDatabase = db
+    }
+    
+    app.lifecycle.use(DatabaseLifecycleHandler(database: db))
+}
+```
+
+### Error Recovery Strategies
+
+```swift
+// Retry logic for transient failures
+func withRetry<T>(
+    maxAttempts: Int = 3,
+    operation: () async throws -> T
+) async throws -> T {
+    var lastError: Error?
+    
+    for attempt in 1...maxAttempts {
+        do {
+            return try await operation()
+        } catch Database.Error.connectionTimeout {
+            lastError = error
+            if attempt < maxAttempts {
+                // Exponential backoff
+                try await Task.sleep(nanoseconds: UInt64(attempt * 1_000_000_000))
+            }
+        } catch {
+            throw error
+        }
+    }
+    
+    throw lastError!
+}
+
+// Usage
+let users = try await withRetry {
+    try await db.read { db in
+        try await User.fetchAll(db)
+    }
+}
+```
+
 ## Advanced Usage
 
 ### Custom Query Types

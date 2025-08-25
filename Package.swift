@@ -1,4 +1,16 @@
 // swift-tools-version: 6.0
+/// Swift Records - A high-level database abstraction layer for PostgreSQL
+/// 
+/// Swift Records provides type-safe database access with connection pooling,
+/// transactions, and migration management built on StructuredQueries and PostgresNIO.
+/// 
+/// Features:
+/// - Connection pooling with automatic lifecycle management
+/// - Full transaction support with isolation levels and savepoints
+/// - Schema migration tracking and management
+/// - Type-safe query building via StructuredQueries
+/// - Testing utilities with schema isolation for parallel tests
+/// - Seamless integration with Point-Free's Dependencies library
 
 import PackageDescription
 
@@ -21,7 +33,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/coenttb/swift-structured-queries-postgres", from: "0.1.0"),
+        .package(url: "https://github.com/coenttb/swift-structured-queries-postgres", from: "0.2.0"),
         .package(url: "https://github.com/pointfreeco/swift-structured-queries", from: "0.13.0"),
         .package(url: "https://github.com/vapor/postgres-nio", from: "1.21.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.0"),

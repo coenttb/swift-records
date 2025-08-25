@@ -32,6 +32,94 @@ extension Database {
     ///
     /// try await migrator.migrate(database)
     /// ```
+    ///
+    /// ## Migration Best Practices
+    ///
+    /// ### Organizing Migrations
+    ///
+    /// ```swift
+    /// extension Database.Migrator {
+    ///     static func appMigrations() -> Database.Migrator {
+    ///         var migrator = Database.Migrator()
+    ///         
+    ///         // Initial schema
+    ///         migrator.registerMigration("001_create_users") { db in
+    ///             try await db.execute("""
+    ///                 CREATE TABLE users (
+    ///                     id UUID PRIMARY KEY,
+    ///                     email TEXT UNIQUE NOT NULL
+    ///                 )
+    ///             """)
+    ///         }
+    ///         
+    ///         // Add columns
+    ///         migrator.registerMigration("002_add_user_timestamps") { db in
+    ///             try await db.execute("""
+    ///                 ALTER TABLE users
+    ///                 ADD COLUMN created_at TIMESTAMP DEFAULT NOW(),
+    ///                 ADD COLUMN updated_at TIMESTAMP DEFAULT NOW()
+    ///             """)
+    ///         }
+    ///         
+    ///         // Add indexes
+    ///         migrator.registerMigration("003_add_email_index") { db in
+    ///             try await db.execute("""
+    ///                 CREATE INDEX idx_users_email ON users(email)
+    ///             """)
+    ///         }
+    ///         
+    ///         return migrator
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// ### Handling Failed Migrations
+    ///
+    /// ```swift
+    /// do {
+    ///     let migrator = Database.Migrator.appMigrations()
+    ///     try await migrator.migrate(database)
+    /// } catch Database.Error.migrationFailed(let id, let error) {
+    ///     logger.error("Migration '\(id)' failed: \(error)")
+    ///     // In development, you might want to reset:
+    ///     if isDevelopment {
+    ///         var migrator = Database.Migrator.appMigrations()
+    ///         migrator.eraseDatabaseOnSchemaChange = true
+    ///         try await migrator.migrate(database)
+    ///     } else {
+    ///         throw error
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// ### Data Migrations
+    ///
+    /// ```swift
+    /// migrator.registerMigration("004_normalize_emails") { db in
+    ///     // First add the new column
+    ///     try await db.execute("""
+    ///         ALTER TABLE users
+    ///         ADD COLUMN email_normalized TEXT
+    ///     """)
+    ///     
+    ///     // Migrate existing data
+    ///     let users = try await User.fetchAll(db)
+    ///     for user in users {
+    ///         let normalized = user.email.lowercased()
+    ///         try await User
+    ///             .filter { $0.id == user.id }
+    ///             .update { $0.emailNormalized = normalized }
+    ///             .execute(db)
+    ///     }
+    ///     
+    ///     // Make it required and unique
+    ///     try await db.execute("""
+    ///         ALTER TABLE users
+    ///         ALTER COLUMN email_normalized SET NOT NULL,
+    ///         ADD CONSTRAINT uk_users_email_normalized UNIQUE(email_normalized)
+    ///     """)
+    /// }
+    /// ```
     public struct Migrator: Sendable {
         private var migrations: [(identifier: String, migrate: @Sendable (any Database.Connection.`Protocol`) async throws -> Void)] = []
         
