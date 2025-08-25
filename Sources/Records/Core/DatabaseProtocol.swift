@@ -4,23 +4,102 @@ import StructuredQueries
 /// A type that provides database access.
 ///
 /// This protocol is the main interface for executing database operations.
-/// It's implemented by both `Database.Queue` (serial access) and `Database.Pool` (concurrent access).
+/// It's implemented by connection types and passed to read/write blocks.
+///
+/// You typically don't call these methods directly. Instead, use the
+/// extension methods on `Table` types for more convenient access.
+///
+/// ## Example
+///
+/// ```swift
+/// // Using Table extensions (preferred)
+/// try await db.read { db in
+///     let users = try await User.fetchAll(db)
+///     let posts = try await Post
+///         .filter { $0.userId == userId }
+///         .fetchAll(db)
+/// }
+///
+/// // Using DatabaseProtocol directly (low-level)
+/// try await db.read { db in
+///     let users = try await db.fetchAll(User.all)
+///     try await db.execute("VACUUM ANALYZE users")
+/// }
+/// ```
 public protocol DatabaseProtocol: Sendable {
-    /// Execute a statement that doesn't return any values.
+    /// Executes a statement that doesn't return any values.
+    ///
+    /// Use this for INSERT, UPDATE, DELETE statements without RETURNING clauses.
+    ///
+    /// - Parameter statement: The statement to execute.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// try await db.execute(
+    ///     User.delete().where { $0.isDeleted }
+    /// )
+    /// ```
     func execute(_ statement: some Statement<()>) async throws
     
-    /// Execute a raw SQL string.
+    /// Executes a raw SQL string.
+    ///
+    /// Use this for DDL statements, maintenance commands, or SQL that
+    /// can't be expressed with StructuredQueries.
+    ///
+    /// - Parameter sql: The SQL string to execute.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// try await db.execute("""
+    ///     CREATE INDEX CONCURRENTLY idx_users_email
+    ///     ON users(email)
+    /// """)
+    /// ```
     func execute(_ sql: String) async throws
     
-    /// Execute a query fragment.
+    /// Executes a query fragment.
+    ///
+    /// This is a low-level method primarily used internally.
+    ///
+    /// - Parameter fragment: The query fragment to execute.
     func executeFragment(_ fragment: QueryFragment) async throws
     
-    /// Fetch all results from a statement.
+    /// Fetches all results from a statement.
+    ///
+    /// Returns an array of all matching records. Be mindful of memory
+    /// usage when fetching large result sets.
+    ///
+    /// - Parameter statement: The statement to execute.
+    /// - Returns: An array of results.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let activeUsers = try await db.fetchAll(
+    ///     User.filter { $0.isActive }
+    /// )
+    /// ```
     func fetchAll<QueryValue: QueryRepresentable>(
         _ statement: some Statement<QueryValue>
     ) async throws -> [QueryValue.QueryOutput]
     
-    /// Fetch a single result from a statement.
+    /// Fetches a single result from a statement.
+    ///
+    /// Returns the first matching record or nil if no records match.
+    /// The query is automatically limited to 1 result.
+    ///
+    /// - Parameter statement: The statement to execute.
+    /// - Returns: The first result or nil.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let user = try await db.fetchOne(
+    ///     User.filter { $0.id == userId }
+    /// )
+    /// ```
     func fetchOne<QueryValue: QueryRepresentable>(
         _ statement: some Statement<QueryValue>
     ) async throws -> QueryValue.QueryOutput?

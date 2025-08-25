@@ -155,12 +155,13 @@ extension Database {
             prefix: prefix
         )
         
-        defer {
-            Task {
-                await database.cleanup()
-            }
+        do {
+            let result = try await block(database)
+            await database.cleanup()
+            return result
+        } catch {
+            await database.cleanup()
+            throw error
         }
-        
-        return try await block(database)
     }
 }

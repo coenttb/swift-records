@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import RecordsTestingSupport
+import RecordsTestSupport
 import EnvironmentVariables
 
 extension URL {

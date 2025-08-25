@@ -1,5 +1,5 @@
 import Testing
-import RecordsTestingSupport
+import RecordsTestSupport
 import Dependencies
 import DependenciesTestSupport
 

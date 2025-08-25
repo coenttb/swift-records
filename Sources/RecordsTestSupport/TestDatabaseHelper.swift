@@ -172,6 +172,11 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     
     deinit {
         // Schedule cleanup to return database to pool
+        // Note: Task.detached is used here intentionally:
+        // 1. We can't use async in deinit
+        // 2. We explicitly capture only [manager], not self
+        // 3. The manager actor owns the database reference and needs to clean it up
+        // 4. This is safe because manager is an actor with its own lifecycle
         Task.detached { [manager] in
             await manager.cleanup()
         }

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import RecordsTestingSupport
+import RecordsTestSupport
 import DependenciesTestSupport
 import Dependencies
 

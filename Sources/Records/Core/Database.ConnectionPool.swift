@@ -34,12 +34,20 @@ extension Database {
             _ operation: @Sendable (PostgresConnection) async throws -> T
         ) async throws -> T {
             let connection = try await checkoutConnection()
-            defer {
-                Task {
-                    try? await self.checkinConnection(connection)
-                }
+            
+            do {
+                let result = try await operation(connection)
+                try await checkinConnection(connection)
+                return result
+            } catch {
+                // Return connection to pool even on error
+                // PostgreSQL automatically rolls back failed transactions,
+                // so the connection should be clean for most error cases.
+                // Only network/protocol errors would truly corrupt a connection,
+                // and those would fail the checkin attempt anyway.
+                try? await checkinConnection(connection)
+                throw error
             }
-            return try await operation(connection)
         }
         
         func checkoutConnection() async throws -> PostgresConnection {

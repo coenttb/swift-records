@@ -16,8 +16,8 @@ let package = Package(
             targets: ["Records"]
         ),
         .library(
-            name: "RecordsTestingSupport",
-            targets: ["RecordsTestingSupport"]
+            name: "RecordsTestSupport",
+            targets: ["RecordsTestSupport"]
         )
     ],
     dependencies: [
@@ -42,7 +42,7 @@ let package = Package(
             exclude: ["Testing"]
         ),
         .target(
-            name: "RecordsTestingSupport",
+            name: "RecordsTestSupport",
             dependencies: [
                 "Records",
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
@@ -54,7 +54,7 @@ let package = Package(
             name: "RecordsTests",
             dependencies: [
                 "Records",
-                "RecordsTestingSupport",
+                "RecordsTestSupport",
                 .product(name: "DependenciesTestSupport", package: "swift-dependencies")
             ]
         )
