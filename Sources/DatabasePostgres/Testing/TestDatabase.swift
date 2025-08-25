@@ -22,13 +22,21 @@ extension Database {
         public func read<T: Sendable>(
             _ block: @Sendable (any DatabaseProtocol) async throws -> T
         ) async throws -> T {
-            try await wrapped.read(block)
+            try await wrapped.read { db in
+                // Ensure schema is set for this connection
+                try await db.execute("SET search_path TO \(schemaName)")
+                return try await block(db)
+            }
         }
         
         public func write<T: Sendable>(
             _ block: @Sendable (any DatabaseProtocol) async throws -> T
         ) async throws -> T {
-            try await wrapped.write(block)
+            try await wrapped.write { db in
+                // Ensure schema is set for this connection
+                try await db.execute("SET search_path TO \(schemaName)")
+                return try await block(db)
+            }
         }
         
         /// Clean up the test schema

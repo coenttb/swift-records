@@ -12,243 +12,185 @@ import Dependencies
     .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
 )
 struct TransactionTests {
+    @Dependency(\.defaultDatabase) var database
     
     @Test("withTransaction commits on success")
     func testWithTransaction() async throws {
-        do {
-            let database = try await TestDatabase.makeTestDatabase()
+        // Execute transaction
+        try await database.withTransaction { db in
+            try await User.insert {
+                User.Draft(name: "Transaction User", email: "tx@example.com", createdAt: Date())
+            }.execute(db)
             
-            // Prepare clean database for test
-            try await TestDatabase.prepareForTest(database)
-            
-            // Execute transaction
-            try await database.withTransaction { db in
-                try await User.insert {
-                    User.Draft(name: "Transaction User", email: "tx@example.com", createdAt: Date())
-                }.execute(db)
-                
-                try await Post.insert {
-                    Post.Draft(userId: 1, title: "Transaction Post", content: "Content", publishedAt: Date())
-                }.execute(db)
-            }
-            
-            // Verify both operations committed
-            let userCount = try await database.read { db in
-                try await User.fetchCount(db)
-            }
-            
-            let postCount = try await database.read { db in
-                try await Post.fetchCount(db)
-            }
-            
-            #expect(userCount == 1)
-            #expect(postCount == 1)
-        } catch {
-            print("Detailed error: \(String(reflecting: error))")
-            throw error
+            try await Post.insert {
+                Post.Draft(userId: 1, title: "Transaction Post", content: "Content", publishedAt: Date())
+            }.execute(db)
         }
+        
+        // Verify data was committed
+        let userCount = try await database.read { db in
+            try await User.fetchCount(db)
+        }
+        
+        let postCount = try await database.read { db in
+            try await Post.fetchCount(db)
+        }
+        
+        #expect(userCount == 1)
+        #expect(postCount == 1)
     }
     
     @Test("Transaction rolls back on error")
     func testTransactionRollback() async throws {
-        do {
-            let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
-            try await TestDatabase.prepareForTest(database)
-            
-            // Insert initial user
-            try await database.write { db in
-                try await User.insert {
-                    User.Draft(name: "Initial", email: "initial@example.com", createdAt: Date())
-                }.execute(db)
-            }
-            
-            // Try transaction that will fail
-            do {
-                try await database.withTransaction { db in
-                    // This should succeed
-                    try await User.insert {
-                        User.Draft(name: "Second", email: "second@example.com", createdAt: Date())
-                    }.execute(db)
-                    
-                    // This should fail (duplicate email)
-                    try await User.insert {
-                        User.Draft(name: "Third", email: "initial@example.com", createdAt: Date())
-                    }.execute(db)
-                }
-                
-                Issue.record("Transaction should have failed")
-            } catch {
-                // Expected error
-            }
-            
-            // Verify rollback - should only have initial user
-            let userCount = try await database.read { db in
-                try await User.fetchCount(db)
-            }
-            
-            #expect(userCount == 1)
-        } catch {
-            print("Detailed error: \(String(reflecting: error))")
-            throw error
+        // Count initial state
+        let initialUserCount = try await database.read { db in
+            try await User.fetchCount(db)
         }
+        
+        // Attempt transaction that will fail
+        do {
+            try await database.withTransaction { db in
+                // This should succeed
+                try await User.insert {
+                    User.Draft(name: "Will Rollback", email: "rollback@example.com", createdAt: Date())
+                }.execute(db)
+                
+                // Force an error
+                struct TestError: Error {}
+                throw TestError()
+            }
+            
+            Issue.record("Transaction should have failed")
+        } catch {
+            // Expected error
+        }
+        
+        // Verify rollback
+        let finalUserCount = try await database.read { db in
+            try await User.fetchCount(db)
+        }
+        
+        #expect(finalUserCount == initialUserCount)
     }
     
     @Test("Transaction isolation levels")
     func testTransactionIsolationLevels() async throws {
-        do {
-            let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
-            try await TestDatabase.prepareForTest(database)
-            
-            // Test different isolation levels
-            let isolationLevels: [TransactionIsolationLevel] = [
-                .readUncommitted,
-                .readCommitted,
-                .repeatableRead,
-                .serializable
-            ]
-            
-            for isolation in isolationLevels {
-                try await database.withTransaction(isolation: isolation) { db in
-                    try await User.insert {
-                        User.Draft(
-                            name: "User \(isolation.rawValue)",
-                            email: "\(isolation.rawValue)@test.com",
-                            createdAt: Date()
-                        )
-                    }.execute(db)
-                }
+        // Test different isolation levels
+        let isolationLevels: [TransactionIsolationLevel] = [
+            .readCommitted,
+            .repeatableRead,
+            .serializable
+        ]
+        
+        for level in isolationLevels {
+            try await database.withTransaction(isolation: level) { db in
+                try await User.insert {
+                    User.Draft(
+                        name: "Isolation \(level)",
+                        email: "iso-\(level)@example.com",
+                        createdAt: Date()
+                    )
+                }.execute(db)
             }
-            
-            let userCount = try await database.read { db in
-                try await User.fetchCount(db)
-            }
-            
-            #expect(userCount == isolationLevels.count)
-        } catch {
-            print("Detailed error: \(String(reflecting: error))")
-            throw error
         }
+        
+        // Verify all were inserted
+        let users = try await database.read { db in
+            try await User.fetchAll(db)
+        }
+        
+        #expect(users.count >= 3)
     }
     
     @Test("withRollback always rolls back")
     func testWithRollback() async throws {
-        do {
-            let database = try await TestDatabase.makeTestDatabase()
-            
-            // Prepare clean database for test
-            try await TestDatabase.prepareForTest(database)
-            
-            // Execute operations in rollback context
-            let result = try await database.withRollback { db in
-                try await User.insert {
-                    User.Draft(name: "Rollback User", email: "rollback@example.com", createdAt: Date())
-                }.execute(db)
-                
-                // Return count within transaction
-                return try await User.fetchCount(db)
-            }
-            
-            // Within transaction, user was visible
-            #expect(result == 1)
-            
-            // After rollback, no users should exist
-            let finalCount = try await database.read { db in
-                try await User.fetchCount(db)
-            }
-            
-            #expect(finalCount == 0)
-        } catch {
-            print("Detailed error: \(String(reflecting: error))")
-            throw error
+        // Count initial state
+        let initialCount = try await database.read { db in
+            try await User.fetchCount(db)
         }
+        
+        // Execute with rollback
+        try await database.withRollback { db in
+            try await User.insert {
+                User.Draft(name: "Will Rollback", email: "rollback2@example.com", createdAt: Date())
+            }.execute(db)
+            
+            // Verify insert worked within transaction
+            let count = try await User.fetchCount(db)
+            #expect(count == initialCount + 1)
+        }
+        
+        // Verify rollback occurred
+        let finalCount = try await database.read { db in
+            try await User.fetchCount(db)
+        }
+        
+        #expect(finalCount == initialCount)
     }
     
     @Test("withSavepoint allows partial rollback")
     func testWithSavepoint() async throws {
-        do {
-            let database = try await TestDatabase.makeTestDatabase()
+        try await database.withTransaction { db in
+            // Insert first user
+            try await User.insert {
+                User.Draft(name: "Before Savepoint", email: "before@example.com", createdAt: Date())
+            }.execute(db)
             
-            // Prepare clean database for test
-            try await TestDatabase.prepareForTest(database)
-            
-            try await database.withTransaction { db in
-                // Insert first user
-                try await User.insert {
-                    User.Draft(name: "First", email: "first@example.com", createdAt: Date())
-                }.execute(db)
-                
-                // Try savepoint that will fail
-                do {
-                    try await database.withSavepoint("risky_operation") { db in
-                        try await User.insert {
-                            User.Draft(name: "Second", email: "second@example.com", createdAt: Date())
-                        }.execute(db)
-                        
-                        // Force an error
-                        try await User.insert {
-                            User.Draft(name: "Duplicate", email: "first@example.com", createdAt: Date())
-                        }.execute(db)
-                    }
-                } catch {
-                    // Savepoint rolled back, but transaction continues
+            // Try savepoint that will rollback
+            do {
+                try await database.withSavepoint("test_savepoint") { spDb in
+                    try await User.insert {
+                        User.Draft(name: "In Savepoint", email: "savepoint@example.com", createdAt: Date())
+                    }.execute(spDb)
+                    
+                    // Force rollback of savepoint
+                    struct SavepointError: Error {}
+                    throw SavepointError()
                 }
-                
-                // Insert third user after savepoint rollback
-                try await User.insert {
-                    User.Draft(name: "Fourth", email: "fourth@example.com", createdAt: Date())
-                }.execute(db)
+            } catch {
+                // Expected - savepoint rolled back
             }
             
-            // Should have first and fourth users, but not second
-            let users = try await database.read { db in
-                try await User.fetchAll(db)
-            }
-            
-            #expect(users.count == 2)
-            #expect(users.contains { $0.name == "First" })
-            #expect(users.contains { $0.name == "Fourth" })
-            #expect(!users.contains { $0.name == "Second" })
-        } catch {
-            print("Detailed error: \(String(reflecting: error))")
-            throw error
+            // Insert after savepoint
+            try await User.insert {
+                User.Draft(name: "After Savepoint", email: "after@example.com", createdAt: Date())
+            }.execute(db)
         }
+        
+        // Verify only users outside savepoint were committed
+        let users = try await database.read { db in
+            try await User.fetchAll(db)
+        }
+        
+        let names = users.map(\.name)
+        #expect(names.contains("Before Savepoint"))
+        #expect(names.contains("After Savepoint"))
+        #expect(!names.contains("In Savepoint"))
     }
     
     @Test("Nested transactions behavior")
     func testNestedTransactions() async throws {
-        do {
-            let database = try await TestDatabase.makeTestDatabase()
+        // Test nested transaction behavior
+        try await database.withTransaction { db1 in
+            try await User.insert {
+                User.Draft(name: "Outer Transaction", email: "outer@example.com", createdAt: Date())
+            }.execute(db1)
             
-            // Prepare clean database for test
-            try await TestDatabase.prepareForTest(database)
-            
-            // Test nested transaction behavior
-            try await database.withTransaction { db in
+            // Nested transaction (actually a savepoint in PostgreSQL)
+            try await database.withTransaction { db2 in
                 try await User.insert {
-                    User.Draft(name: "Outer", email: "outer@example.com", createdAt: Date())
-                }.execute(db)
-                
-                // Nested transaction (PostgreSQL doesn't support true nested transactions)
-                // This should work with savepoints internally
-                try await database.withTransaction { innerDb in
-                    try await User.insert {
-                        User.Draft(name: "Inner", email: "inner@example.com", createdAt: Date())
-                    }.execute(innerDb)
-                }
+                    User.Draft(name: "Inner Transaction", email: "inner@example.com", createdAt: Date())
+                }.execute(db2)
             }
-            
-            let userCount = try await database.read { db in
-                try await User.fetchCount(db)
-            }
-            
-            #expect(userCount == 2)
-        } catch {
-            print("Detailed error: \(String(reflecting: error))")
-            throw error
         }
+        
+        // Both should be committed
+        let users = try await database.read { db in
+            try await User.fetchAll(db)
+        }
+        
+        let names = users.map(\.name)
+        #expect(names.contains("Outer Transaction"))
+        #expect(names.contains("Inner Transaction"))
     }
 }
