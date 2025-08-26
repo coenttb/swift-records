@@ -121,13 +121,17 @@ extension Database {
     /// }
     /// ```
     public struct Migrator: Sendable {
-        private var migrations: [(identifier: String, migrate: @Sendable (any Database.Connection.`Protocol`) async throws -> Void)] = []
-        
+        private var migrations: [(
+            identifier: String,
+            migrate: @Sendable (any Database.Connection.`Protocol`) async throws -> Void
+        )] = []
+        #if DEBUG
         /// If true, the migrator recreates the whole database from scratch
         /// if it detects a change in migration definitions.
         ///
         /// - warning: This flag can destroy data! Use only during development.
         public var eraseDatabaseOnSchemaChange = false
+        #endif
         
         /// The foreign key checking strategy.
         public var foreignKeyChecks: ForeignKeyChecks = .deferred
@@ -165,7 +169,7 @@ extension Database {
                 
                 // Get applied migrations
                 let appliedIdentifiers = try await fetchAppliedIdentifiers(db)
-                
+                #if DEBUG
                 // Check for schema changes if needed
                 if eraseDatabaseOnSchemaChange {
                     let hasChanges = try await hasSchemaChanges(db, appliedIdentifiers: appliedIdentifiers)
@@ -174,6 +178,7 @@ extension Database {
                         try await createMigrationTable(db)
                     }
                 }
+                #endif
                 
                 // Apply pending migrations
                 for (identifier, migrate) in migrations {
@@ -223,8 +228,8 @@ extension Database {
                 )
             """)
             
-            // Fetch applied migrations using the DatabaseMigration table
-            return try await DatabaseMigration.fetchAppliedIdentifiers(db)
+            // Fetch applied migrations using the Database.Migrator.Migration table
+            return try await Database.Migrator.Migration.fetchAppliedIdentifiers(db)
         }
         
         private func applyMigration(
@@ -244,7 +249,7 @@ extension Database {
                 try await migrate(db)
                 
                 // Record the migration using structured insert
-                try await DatabaseMigration.recordMigration(identifier: identifier, db: db)
+                try await Database.Migrator.Migration.recordMigration(identifier: identifier, db: db)
                 
                 if restoreForeignKeys {
                     try await db.execute("SET session_replication_role = 'origin'")
@@ -262,7 +267,7 @@ extension Database {
             let registeredIdentifiers = Set(migrations.map(\.identifier))
             return !appliedIdentifiers.isSubset(of: registeredIdentifiers)
         }
-        
+        #if DEBUG
         private func eraseDatabaseContent(_ db: any Database.Connection.`Protocol`) async throws {
             // Drop all tables in the public schema
             try await db.execute("""
@@ -276,6 +281,7 @@ extension Database {
                 END $$;
             """)
         }
+        #endif
     }
 }
 

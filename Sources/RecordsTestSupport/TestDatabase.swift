@@ -65,7 +65,7 @@ extension Database {
         }
         
         public func close() async throws {
-            
+            await self.cleanup()
         }
         
         deinit {
