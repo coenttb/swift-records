@@ -87,7 +87,7 @@ extension Database {
             var rowIterator = rows.makeAsyncIterator()
             
             // Create an actor to safely manage the async iterator
-            let iteratorManager = CursorIteratorManager<QueryValue.QueryOutput> { [logger] in
+            let iteratorManager = CursorIteratorManager<QueryValue.QueryOutput> {
                 guard let row = try await rowIterator.next() else {
                     return nil
                 }

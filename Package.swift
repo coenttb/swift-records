@@ -33,7 +33,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/coenttb/swift-structured-queries-postgres", from: "0.2.0"),
+        .package(url: "https://github.com/coenttb/swift-structured-queries-postgres", from: "0.1.0"),
         .package(url: "https://github.com/pointfreeco/swift-structured-queries", from: "0.13.0"),
         .package(url: "https://github.com/vapor/postgres-nio", from: "1.21.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.0"),
