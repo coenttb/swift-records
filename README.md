@@ -131,9 +131,11 @@ struct UserService {
     func createUser(name: String, email: String) async throws {
         try await db.write { db in
             try await User.insert {
-                ($0.name, $0.email, $0.createdAt)
-            } values: {
-                (name, email, Date())
+                User.Draft(
+                    name: name,
+                    email: email,
+                    createdAt: Date()
+                )
             }.execute(db)
         }
     }
@@ -170,17 +172,20 @@ struct TransferService {
     func createUserWithProfile(name: String, email: String) async throws {
         try await db.withTransaction { db in
             let userId = try await User.insert {
-                ($0.name, $0.email, $0.createdAt)
-            } values: {
-                (name, email, Date())
+                User.Draft(
+                    name: name,
+                    email: email,
+                    createdAt: Date()
+                )
             }
             .returning(\.id)
             .fetchOne(db)
             
             try await Profile.insert {
-                ($0.userId, $0.bio)
-            } values: {
-                (userId!, "New user")
+                Profile.Draft(
+                    userId: userId!,
+                    bio: "New user"
+                )
             }.execute(db)
             // Both succeed or both are rolled back
         }
@@ -213,7 +218,97 @@ try await db.withTransaction { db in
 
 ### Migrations
 
-TBD
+Swift Records uses a forward-only migration system - migrations can only be applied, not rolled back. This design choice prioritizes simplicity and safety over reversibility.
+
+```swift
+import Records
+
+// Define your migrations
+var migrator = Database.Migrator()
+
+// Register migrations in order
+migrator.registerMigration("create_users") { db in
+    try await db.execute("""
+        CREATE TABLE users (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            email TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+}
+
+migrator.registerMigration("add_user_status") { db in
+    try await db.execute("""
+        ALTER TABLE users 
+        ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
+    """)
+}
+
+migrator.registerMigration("create_posts") { db in
+    try await db.execute("""
+        CREATE TABLE posts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            content TEXT,
+            published_at TIMESTAMPTZ
+        )
+    """)
+    
+    try await db.execute("""
+        CREATE INDEX idx_posts_user_id ON posts(user_id)
+    """)
+}
+
+// Apply migrations at startup
+@main
+struct MyApp {
+    static func main() async throws {
+        let db = try await Database.Pool(
+            configuration: .fromEnvironment(),
+            minConnections: 5,
+            maxConnections: 20
+        )
+        
+        // Run pending migrations
+        try await db.write { db in
+            try await migrator.migrate(db)
+        }
+        
+        prepareDependencies {
+            $0.defaultDatabase = db
+        }
+        
+        // Your app code...
+    }
+}
+```
+
+#### Why Forward-Only?
+
+Swift Records deliberately omits rollback functionality for migrations:
+
+1. **Production Safety**: Rollbacks risk data loss and are rarely safe in production
+2. **Simplicity**: Single migration path reduces complexity and potential for errors
+3. **Modern Practice**: Aligns with immutable infrastructure and forward-fix strategies
+4. **Real-World Usage**: Teams typically fix issues with new migrations, not rollbacks
+
+#### Why Pure SQL?
+
+Migrations use raw SQL strings rather than Swift model references because migrations must remain immutable historical records. Using type-safe references (like `User.table` or field names) would break when models evolve - if you rename `User` to `Account` or change field names, old migrations would fail. Pure SQL ensures migrations can always recreate the exact database schema progression, regardless of how your Swift code changes.
+
+For development iteration, use `eraseDatabaseOnSchemaChange`:
+
+```swift
+// Development configuration
+try await migrator.migrate(
+    db,
+    options: .init(eraseDatabaseOnSchemaChange: true)
+)
+```
+
+This approach keeps production migrations safe and predictable while providing flexibility during development.
 
 ## Testing
 
@@ -233,9 +328,10 @@ struct UserTests {
         // Each test runs in its own schema, enabling parallel execution
         try await db.withRollback { db in
             let user = try await User.insert {
-                ($0.name, $0.email)
-            } values: {
-                ("Test User", "test@example.com")
+                User.Draft(
+                    name: "Test User",
+                    email: "test@example.com"
+                )
             }
             .returning(\\.self)
             .execute(db)

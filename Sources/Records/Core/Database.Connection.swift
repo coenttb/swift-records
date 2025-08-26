@@ -66,5 +66,60 @@ extension Database {
             let results = try await fetchAll(statement)
             return results.first
         }
+        
+        public func fetchCursor<QueryValue: QueryRepresentable>(
+            _ statement: some Statement<QueryValue>
+        ) async throws -> Database.Cursor<QueryValue.QueryOutput> {
+            let queryFragment = statement.query
+            guard !queryFragment.isEmpty else {
+                // Return empty cursor for empty queries
+                return Database.Cursor<QueryValue.QueryOutput> { nil }
+            }
+            
+            let postgresStatement = PostgresStatement(queryFragment: queryFragment)
+            let rows = try await postgres.query(
+                postgresStatement.query,
+                logger: logger
+            )
+            
+            // We need to manually iterate and decode since PostgresQueryCursor
+            // expects QueryDecodable types, but we have QueryRepresentable
+            var rowIterator = rows.makeAsyncIterator()
+            
+            // Create an actor to safely manage the async iterator
+            let iteratorManager = CursorIteratorManager<QueryValue.QueryOutput> { [logger] in
+                guard let row = try await rowIterator.next() else {
+                    return nil
+                }
+                var decoder = PostgresQueryDecoder(row: row)
+                let value = try decoder.decodeColumns(QueryValue.self)
+                return value
+            }
+            
+            return Database.Cursor<QueryValue.QueryOutput> {
+                try await iteratorManager.next()
+            }
+        }
+    }
+}
+
+/// Actor to safely manage cursor iteration for streaming results
+private actor CursorIteratorManager<Element: Sendable> {
+    private let fetchNext: () async throws -> Element?
+    private var exhausted = false
+    
+    init(fetchNext: @escaping () async throws -> Element?) {
+        self.fetchNext = fetchNext
+    }
+    
+    func next() async throws -> Element? {
+        guard !exhausted else { return nil }
+        
+        if let element = try await fetchNext() {
+            return element
+        } else {
+            exhausted = true
+            return nil
+        }
     }
 }

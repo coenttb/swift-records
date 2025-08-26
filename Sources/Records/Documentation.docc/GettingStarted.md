@@ -140,9 +140,11 @@ struct UserService {
 func createUser(name: String, email: String) async throws -> User {
     try await db.write { db in
         try await User.insert {
-            ($0.name, $0.email, $0.createdAt)
-        } values: {
-            (name, email, Date())
+            User.Draft(
+                name: name,
+                email: email,
+                createdAt: Date()
+            )
         }
         .returning(\.self)
         .fetchOne(db)!
@@ -154,9 +156,11 @@ func createUsers(_ users: [(name: String, email: String)]) async throws {
     try await db.write { db in
         for user in users {
             try await User.insert {
-                ($0.name, $0.email, $0.createdAt)
-            } values: {
-                (user.name, user.email, Date())
+                User.Draft(
+                    name: user.name,
+                    email: user.email,
+                    createdAt: Date()
+                )
             }.execute(db)
         }
     }
@@ -235,9 +239,11 @@ struct TodoService {
     func createTodo(title: String, userId: Int) async throws -> Todo {
         try await db.write { db in
             try await Todo.insert {
-                ($0.title, $0.completed, $0.userId)
-            } values: {
-                (title, false, userId)
+                Todo.Draft(
+                    title: title,
+                    completed: false,
+                    userId: userId
+                )
             }
             .returning(\.self)
             .fetchOne(db)!

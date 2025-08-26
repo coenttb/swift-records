@@ -59,38 +59,3 @@ extension Database {
         }
     }
 }
-
-// MARK: - Database.Cursor.IteratorManager
-
-extension Database.Cursor {
-    /// Actor to safely manage the iterator
-    fileprivate actor IteratorManager {
-        private var iterator: Array<Element>.Iterator
-        
-        init(_ array: [Element]) {
-            self.iterator = array.makeIterator()
-        }
-        
-        func next() -> Element? {
-            iterator.next()
-        }
-    }
-}
-
-// MARK: - Database.Connection.`Protocol` Extension
-
-extension Database.Connection.`Protocol` {
-    /// Returns a cursor for the given statement.
-    func fetchCursor<QueryValue: QueryRepresentable>(
-        _ statement: some Statement<QueryValue>
-    ) async throws -> Database.Cursor<QueryValue.QueryOutput> {
-        // For now, we'll fetch all results and create a cursor from them
-        // This is not ideal for memory usage, but works as a starting point
-        let results = try await fetchAll(statement)
-        let manager = Database.Cursor<QueryValue.QueryOutput>.IteratorManager(results)
-        
-        return Database.Cursor<QueryValue.QueryOutput> {
-            await manager.next()
-        }
-    }
-}

@@ -23,9 +23,10 @@ struct UserTests {
 
         let user = try await db.write { db in
             try await User.insert {
-                ($0.name, $0.email)
-            } values: {
-                ("Alice", "alice@example.com")
+                User.Draft(
+                    name: "Alice",
+                    email: "alice@example.com"
+                )
             }
             .returning(\.self)
             .fetchOne(db)!
@@ -77,9 +78,10 @@ Use `withRollback` for test isolation without schema switching:
         try await db.withRollback { db in
             // Create user
             let user = try await User.insert {
-                ($0.name, $0.email)
-            } values: {
-                ("Bob", "bob@example.com")
+                User.Draft(
+                    name: "Bob",
+                    email: "bob@example.com"
+                )
             }
             .returning(\.self)
             .fetchOne(db)!
@@ -199,9 +201,10 @@ Verify transactional behavior:
         // Setup initial data
         try await db.write { db in
             try await Account.insert {
-                ($0.id, $0.balance)
-            } values: {
-                (1, 100.0)
+                Account.Draft(
+                    id: 1,
+                    balance: 100.0
+                )
             }.execute(db)
         }
         
@@ -249,9 +252,10 @@ Test complex queries and relationships:
             // Create users
             for i in 1...3 {
                 let user = try await User.insert {
-                    ($0.name, $0.email)
-                } values: {
-                    ("User \(i)", "user\(i)@example.com")
+                    User.Draft(
+                        name: "User \(i)",
+                        email: "user\(i)@example.com"
+                    )
                 }
                 .returning(\.id)
                 .fetchOne(db)!
@@ -259,9 +263,11 @@ Test complex queries and relationships:
                 // Create posts for each user
                 for j in 1...i {
                     try await Post.insert {
-                        ($0.userId, $0.title, $0.published)
-                    } values: {
-                        (user, "Post \(j) by User \(i)", j % 2 == 0)
+                        Post.Draft(
+                            userId: user,
+                            title: "Post \(j) by User \(i)",
+                            published: j % 2 == 0
+                        )
                     }.execute(db)
                 }
             }
@@ -298,9 +304,10 @@ extension TestDatabase {
             
             for (name, email) in users {
                 try await User.insert {
-                    ($0.name, $0.email)
-                } values: {
-                    (name, email)
+                    User.Draft(
+                        name: name,
+                        email: email
+                    )
                 }.execute(db)
             }
         }
@@ -340,9 +347,10 @@ Test query performance:
         try await db.write { db in
             for i in 1...1000 {
                 try await Product.insert {
-                    ($0.name, $0.price)
-                } values: {
-                    ("Product \(i)", Decimal(i))
+                    Product.Draft(
+                        name: "Product \(i)",
+                        price: Decimal(i)
+                    )
                 }.execute(db)
             }
         }
@@ -451,9 +459,11 @@ struct OrderServiceTests {
                 
                 // Create order
                 return try await Order.insert {
-                    ($0.productId, $0.quantity, $0.total)
-                } values: {
-                    (productId, quantity, product.price * Decimal(quantity))
+                    Order.Draft(
+                        productId: productId,
+                        quantity: quantity,
+                        total: product.price * Decimal(quantity)
+                    )
                 }
                 .returning(\.self)
                 .fetchOne(db)!
@@ -465,9 +475,11 @@ struct OrderServiceTests {
         // Setup
         try await db.write { db in
             try await Product.insert {
-                ($0.name, $0.price, $0.stock)
-            } values: {
-                ("Widget", 10.00, 100)
+                Product.Draft(
+                    name: "Widget",
+                    price: 10.00,
+                    stock: 100
+                )
             }.execute(db)
         }
         
@@ -489,9 +501,11 @@ struct OrderServiceTests {
         // Setup
         try await db.write { db in
             try await Product.insert {
-                ($0.name, $0.price, $0.stock)
-            } values: {
-                ("Widget", 10.00, 3)
+                Product.Draft(
+                    name: "Widget",
+                    price: 10.00,
+                    stock: 3
+                )
             }.execute(db)
         }
         

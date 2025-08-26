@@ -1,7 +1,12 @@
-# Swift-Records: SharingGRDB-Style API for PostgreSQL
+# Swift-Records: High-Level PostgreSQL Database Layer for Swift
 
 ## Project Overview
-A lightweight Swift package that provides SharingGRDB-like APIs for PostgreSQL by wrapping swift-structured-queries-postgres. Swift-Records acts as an elegant bridge between structured-queries statements and PostgreSQL execution, without reimplementing core database functionality.
+Swift-Records is a high-level entry point for PostgreSQL in Swift, providing a GRDB-style API. It's built on top of:
+- **swift-structured-queries** (/Users/coen/Developer/pointfreeco/swift-structured-queries) - Type-safe SQL query building
+- **swift-structured-queries-postgres** (/Users/coen/Developer/coenttb/swift-structured-queries-postgres) - PostgreSQL adapter for structured queries
+- **GRDB** (/Users/coen/Developer/groue/GRDB.swift) - API design inspiration and patterns
+
+Swift-Records acts as an elegant bridge between structured-queries statements and PostgreSQL execution, providing high-level abstractions while delegating core database operations to the underlying libraries.
 
 ## Key Design Principles
 1. **Minimal Wrapper**: All database operations delegate to swift-structured-queries-postgres

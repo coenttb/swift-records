@@ -126,18 +126,22 @@ func createUserWithProfile(
     try await db.withTransaction { db in
         // Create user
         let user = try await User.insert {
-            ($0.name, $0.email, $0.createdAt)
-        } values: {
-            (name, email, Date())
+            User.Draft(
+                name: name,
+                email: email,
+                createdAt: Date()
+            )
         }
         .returning(\.self)
         .fetchOne(db)!
         
         // Create profile using user's ID
         let profile = try await Profile.insert {
-            ($0.userId, $0.bio, $0.createdAt)
-        } values: {
-            (user.id, bio, Date())
+            Profile.Draft(
+                userId: user.id,
+                bio: bio,
+                createdAt: Date()
+            )
         }
         .returning(\.self)
         .fetchOne(db)!
@@ -292,9 +296,11 @@ struct OrderService {
         try await db.withTransaction(isolation: .serializable) { db in
             // Create order
             let order = try await Order.insert {
-                ($0.userId, $0.status, $0.createdAt)
-            } values: {
-                (userId, "pending", Date())
+                Order.Draft(
+                    userId: userId,
+                    status: "pending",
+                    createdAt: Date()
+                )
             }
             .returning(\.self)
             .fetchOne(db)!
@@ -324,9 +330,12 @@ struct OrderService {
                 
                 // Create order item
                 try await OrderItem.insert {
-                    ($0.orderId, $0.productId, $0.quantity, $0.price)
-                } values: {
-                    (order.id, item.productId, item.quantity, product.price)
+                    OrderItem.Draft(
+                        orderId: order.id,
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        price: product.price
+                    )
                 }.execute(db)
                 
                 totalAmount += product.price * Decimal(item.quantity)

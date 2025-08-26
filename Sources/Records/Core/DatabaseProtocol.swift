@@ -104,5 +104,34 @@ extension Database.Connection {
         func fetchOne<QueryValue: QueryRepresentable>(
             _ statement: some Statement<QueryValue>
         ) async throws -> QueryValue.QueryOutput?
+        
+        /// Returns a cursor for streaming results from a statement.
+        ///
+        /// Cursors allow you to iterate over large result sets without loading
+        /// all rows into memory at once. This is ideal for processing large
+        /// datasets or when memory usage is a concern.
+        ///
+        /// - Parameter statement: The statement to execute.
+        /// - Returns: A cursor for iterating over results.
+        ///
+        /// ## Example
+        ///
+        /// ```swift
+        /// let cursor = try await db.fetchCursor(
+        ///     User.order { $0.createdAt }
+        /// )
+        /// 
+        /// for try await user in cursor {
+        ///     // Process each user one at a time
+        ///     await processUser(user)
+        /// }
+        /// ```
+        ///
+        /// - Note: Cursors stream results from the database, so they must be
+        ///   consumed while the database connection is active. In pooled
+        ///   connections, the cursor holds onto a connection until consumed.
+        func fetchCursor<QueryValue: QueryRepresentable>(
+            _ statement: some Statement<QueryValue>
+        ) async throws -> Database.Cursor<QueryValue.QueryOutput>
     }
 }
