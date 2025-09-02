@@ -1,6 +1,6 @@
 import Foundation
-import StructuredQueriesPostgres
 import PostgresNIO
+import StructuredQueriesPostgres
 
 extension Database {
     /// A test database wrapper that provides schema isolation for tests
@@ -8,7 +8,7 @@ extension Database {
         private let wrapped: any Writer
         private let schemaName: String
         private let shouldCleanup: Bool
-        
+
         init(
             wrapped: any Writer,
             schemaName: String,
@@ -18,7 +18,7 @@ extension Database {
             self.schemaName = schemaName
             self.shouldCleanup = shouldCleanup
         }
-        
+
         public func read<T: Sendable>(
             _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
@@ -28,7 +28,7 @@ extension Database {
                 return try await block(db)
             }
         }
-        
+
         public func write<T: Sendable>(
             _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
@@ -38,11 +38,11 @@ extension Database {
                 return try await block(db)
             }
         }
-        
+
         /// Clean up the test schema
         public func cleanup() async {
             guard shouldCleanup else { return }
-            
+
             do {
                 // Drop the schema first
                 try await wrapped.write { db in
@@ -51,7 +51,7 @@ extension Database {
             } catch {
                 // Ignore schema drop errors silently
             }
-            
+
             // Always try to close the connection, even if schema drop failed
             do {
                 if let runner = wrapped as? Database.ClientRunner {
@@ -61,11 +61,11 @@ extension Database {
                 // Ignore close errors silently
             }
         }
-        
+
         public func close() async throws {
             await self.cleanup()
         }
-        
+
         deinit {
             // Note: Can't do async cleanup in deinit
             // Tests should call cleanup() explicitly or use withTestDatabase
@@ -92,23 +92,23 @@ extension Database {
         // Generate unique schema name
         let uuid = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "_")
         let schemaName = "\(prefix)_\(uuid)"
-        
+
         // Create connection
         let config = try configuration ?? PostgresClient.Configuration.fromEnvironment()
         let database = await Database.singleConnection(configuration: config)
-        
+
         // Create and use test schema
         try await database.write { db in
             try await db.execute("CREATE SCHEMA \(schemaName)")
             try await db.execute("SET search_path TO \(schemaName)")
         }
-        
+
         return TestDatabase(
             wrapped: database,
             schemaName: schemaName
         )
     }
-    
+
     /// Creates a test database pool with an isolated schema
     public static func testDatabasePool(
         configuration: PostgresClient.Configuration? = nil,
@@ -119,7 +119,7 @@ extension Database {
         // Generate unique schema name
         let uuid = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "_")
         let schemaName = "\(prefix)_\(uuid)"
-        
+
         // Create connection pool
         let config = try configuration ?? PostgresClient.Configuration.fromEnvironment()
         let pool = await Database.pool(
@@ -127,13 +127,13 @@ extension Database {
             minConnections: minConnections,
             maxConnections: maxConnections
         )
-        
+
         // Create and use test schema
         try await pool.write { db in
             try await db.execute("CREATE SCHEMA \(schemaName)")
             try await db.execute("SET search_path TO \(schemaName)")
         }
-        
+
         return TestDatabase(
             wrapped: pool,
             schemaName: schemaName
@@ -154,7 +154,7 @@ extension Database {
             configuration: configuration,
             prefix: prefix
         )
-        
+
         do {
             let result = try await block(database)
             await database.cleanup()

@@ -1,8 +1,8 @@
 import Dependencies
 import EnvironmentVariables
 import Foundation
-import PostgresNIO
 import NIOSSL
+import PostgresNIO
 
 // MARK: - Configuration Errors
 
@@ -11,7 +11,7 @@ extension Database {
     public enum ConfigurationError: Swift.Error, CustomStringConvertible {
         case missingEnvironmentVariable(String)
         case invalidPort(String)
-        
+
         public var description: String {
             switch self {
             case let .missingEnvironmentVariable(key):
@@ -60,12 +60,12 @@ extension PostgresClient.Configuration {
     /// - Throws: ``Database.ConfigurationError`` if required environment variables are missing or invalid.
     public static func fromEnvironment() throws -> PostgresClient.Configuration {
         @Dependency(\.envVars) var envVars
-        
+
         // Get host
         guard let host = envVars["DATABASE_HOST"] ?? envVars["POSTGRES_HOST"] else {
             throw Database.ConfigurationError.missingEnvironmentVariable("DATABASE_HOST or POSTGRES_HOST")
         }
-        
+
         // Get port
         let portString = envVars["DATABASE_PORT"] ?? envVars["POSTGRES_PORT"]
         guard let portString else {
@@ -74,20 +74,20 @@ extension PostgresClient.Configuration {
         guard let port = Int(portString) else {
             throw Database.ConfigurationError.invalidPort(portString)
         }
-        
+
         // Get database name
         guard let database = envVars["DATABASE_NAME"] ?? envVars["POSTGRES_DB"] else {
             throw Database.ConfigurationError.missingEnvironmentVariable("DATABASE_NAME or POSTGRES_DB")
         }
-        
+
         // Get username
         guard let username = envVars["DATABASE_USER"] ?? envVars["POSTGRES_USER"] else {
             throw Database.ConfigurationError.missingEnvironmentVariable("DATABASE_USER or POSTGRES_USER")
         }
-        
+
         // Password is optional
         let password = envVars["DATABASE_PASSWORD"] ?? envVars["POSTGRES_PASSWORD"]
-        
+
         return PostgresClient.Configuration(
             host: host,
             port: port,

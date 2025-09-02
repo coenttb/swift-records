@@ -9,7 +9,7 @@ import Foundation
 import StructuredQueriesPostgres
 
 extension Select {
-    
+
     /// Creates a new select statement from this one by appending `count(*)` to its selection.
     ///
     /// - Parameter filter: A `FILTER` clause to apply to the aggregation.
@@ -21,7 +21,7 @@ extension Select {
         let filter = filter?(From.columns, repeat (each J).columns)
         return select { _ in .count(filter: filter) }
     }
-    
+
     /// Creates a new select statement from this one by appending `count(*)` to its selection.
     ///
     /// - Parameter filter: A `FILTER` clause to apply to the aggregation.
@@ -35,7 +35,7 @@ extension Select {
         let filter = filter?(From.columns, repeat (each J).columns)
         return select { _ in .count(filter: filter) }
     }
-    
+
     /// Creates a new select statement from this one by appending `count(*)` to its selection.
     ///
     /// - Parameter filter: A `FILTER` clause to apply to the aggregation.
@@ -47,7 +47,7 @@ extension Select {
         let filter = filter?(From.columns, Joins.columns)
         return select { _, _ in .count(filter: filter) }
     }
-    
+
     /// Creates a new select statement from this one by appending `count(*)` to its selection.
     ///
     /// - Parameter filter: A `FILTER` clause to apply to the aggregation.

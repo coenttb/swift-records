@@ -51,15 +51,15 @@ extension Database {
         func read<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             fatalError("""
                 The defaultDatabase dependency has not been configured.
-                
+
                 Configure it at app startup:
-                
+
                 try await prepareDependencies {
                     $0.defaultDatabase = try await Database.Queue()
                 }
-                
+
                 Or in tests:
-                
+
                 try await withDependencies {
                     $0.defaultDatabase = try await Database.Queue()
                 } operation: {
@@ -67,11 +67,11 @@ extension Database {
                 }
                 """)
         }
-        
+
         func write<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T {
             try await read(block)
         }
-        
+
         func close() async throws {
             fatalError()
         }

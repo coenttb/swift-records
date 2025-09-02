@@ -1,8 +1,8 @@
-//import Foundation
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import RecordsTestSupport
+// import Testing
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //    @Suite struct InsertTests {
 //        @Test func select() {
 //            assertInlineSnapshot(
@@ -71,11 +71,11 @@
 //            }
 //        }
 //    }
-//}
+// }
 //
 //
-//@Suite("INSERT Tests")
-//struct InsertTests {
+// @Suite("INSERT Tests")
+// struct InsertTests {
 //
 //    @Test("Basic INSERT with values")
 //    func insertBasic() {
@@ -198,4 +198,4 @@
 //            sql: ""
 //        )
 //    }
-//}
+// }

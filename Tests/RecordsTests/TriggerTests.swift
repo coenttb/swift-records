@@ -1,10 +1,10 @@
-import Testing
-import Foundation
-import Records
-import StructuredQueriesPostgres
 import Dependencies
 import DependenciesTestSupport
+import Foundation
+import Records
 import RecordsTestSupport
+import StructuredQueriesPostgres
+import Testing
 
 @Suite(
     "Trigger Tests",
@@ -13,11 +13,9 @@ import RecordsTestSupport
 )
 struct TriggerTests {
     @Dependency(\.defaultDatabase) var db
-    
-    
-    
+
     // MARK: - Setup
-    
+
     func setup() async throws {
         try await db.write { db in
             // Create test tables
@@ -29,7 +27,7 @@ struct TriggerTests {
                     "updateCount" INTEGER DEFAULT 0
                 )
             """)
-            
+
             try await db.execute("""
                 CREATE TABLE IF NOT EXISTS "itemLogs" (
                     "id" SERIAL PRIMARY KEY,
@@ -40,21 +38,21 @@ struct TriggerTests {
             """)
         }
     }
-    
+
     func cleanup() async throws {
         try await db.write { db in
             try await db.execute("DROP TABLE IF EXISTS \"itemLogs\" CASCADE")
             try await db.execute("DROP TABLE IF EXISTS \"items\" CASCADE")
         }
     }
-    
+
     // MARK: - Simple Trigger Tests
-    
+
     @Test("Basic insert trigger sets default position")
     func testInsertTrigger() async throws {
         try await setup()
         defer { Task { try? await cleanup() } }
-        
+
         // Create a trigger that sets position on insert
         try await db.write { db in
             // Use createTriggerFunction helper for PostgreSQL-specific function
@@ -67,7 +65,7 @@ struct TriggerTests {
                     RETURN NEW;
                     """
             )
-            
+
             // Create the trigger using that function
             try await db.execute("""
                 CREATE TRIGGER set_position_trigger
@@ -76,7 +74,7 @@ struct TriggerTests {
                 EXECUTE FUNCTION set_default_position()
             """)
         }
-        
+
         // Insert items without setting position
         try await db.write { db in
             for name in ["First", "Second", "Third"] {
@@ -85,20 +83,20 @@ struct TriggerTests {
                 }.execute(db)
             }
         }
-        
+
         // Check that positions were set automatically
         let items = try await db.read { db in
             try await Item.all
                 .order(by: \.position)
                 .fetchAll(db)
         }
-        
+
         #expect(items.count == 3)
         #expect(items[0].position == 1)
         #expect(items[1].position == 2)
         #expect(items[2].position == 3)
     }
-    
+
 //    @Test("Update trigger increments counter")
 //    func testUpdateTrigger() async throws {
 //        try await setup()
@@ -150,7 +148,7 @@ struct TriggerTests {
 //        
 //        #expect(item?.updateCount == 3, "Should have been updated 3 times")
 //    }
-    
+
 //    @Test("Delete trigger logs deletions")
 //    func testDeleteTrigger() async throws {
 //        try await setup()
@@ -203,7 +201,6 @@ struct TriggerTests {
 //        #expect(logs[0].action.contains("Item A"))
 //    }
 }
-
 
 // MARK: - Test Models
 

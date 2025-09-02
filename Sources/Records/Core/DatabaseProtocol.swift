@@ -42,7 +42,7 @@ extension Database.Connection {
         /// )
         /// ```
         func execute(_ statement: some Statement<()>) async throws
-        
+
         /// Executes a raw SQL string.
         ///
         /// Use this for DDL statements, maintenance commands, or SQL that
@@ -59,14 +59,14 @@ extension Database.Connection {
         /// """)
         /// ```
         func execute(_ sql: String) async throws
-        
+
         /// Executes a query fragment.
         ///
         /// This is a low-level method primarily used internally.
         ///
         /// - Parameter fragment: The query fragment to execute.
         func executeFragment(_ fragment: QueryFragment) async throws
-        
+
         /// Fetches all results from a statement.
         ///
         /// Returns an array of all matching records. Be mindful of memory
@@ -85,7 +85,7 @@ extension Database.Connection {
         func fetchAll<QueryValue: QueryRepresentable>(
             _ statement: some Statement<QueryValue>
         ) async throws -> [QueryValue.QueryOutput]
-        
+
         /// Fetches a single result from a statement.
         ///
         /// Returns the first matching record or nil if no records match.
@@ -104,7 +104,7 @@ extension Database.Connection {
         func fetchOne<QueryValue: QueryRepresentable>(
             _ statement: some Statement<QueryValue>
         ) async throws -> QueryValue.QueryOutput?
-        
+
         /// Returns a cursor for streaming results from a statement.
         ///
         /// Cursors allow you to iterate over large result sets without loading

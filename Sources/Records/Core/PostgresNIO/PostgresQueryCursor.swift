@@ -3,7 +3,7 @@ import NIOCore
 import PostgresNIO
 import StructuredQueriesPostgres
 
-//extension Database {
+// extension Database {
 //    /// A cursor for iterating over PostgreSQL query results
 //    public struct QueryCursor<Element: QueryDecodable>: AsyncSequence {
 //        public typealias Element = Element
@@ -35,4 +35,4 @@ import StructuredQueriesPostgres
 //            }
 //        }
 //    }
-//}
+// }

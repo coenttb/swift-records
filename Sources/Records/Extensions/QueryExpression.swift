@@ -56,7 +56,7 @@ extension QueryExpression where QueryValue: QueryBindable & _OptionalPromotable 
     ) -> some QueryExpression<QueryValue._Optionalized.Wrapped?> {
         AggregateFunction("max", [queryFragment], filter: filter?.queryFragment)
     }
-    
+
     /// A minimum aggregate of this expression.
     ///
     /// ```swift
@@ -93,7 +93,7 @@ where QueryValue: _OptionalPromotable, QueryValue._Optionalized.Wrapped: Numeric
     ) -> some QueryExpression<Double?> {
         AggregateFunction("avg", isDistinct: isDistinct, [queryFragment], filter: filter?.queryFragment)
     }
-    
+
     /// An sum aggregate of this expression.
     ///
     /// ```swift
@@ -122,7 +122,7 @@ where QueryValue: _OptionalPromotable, QueryValue._Optionalized.Wrapped: Numeric
             .queryFragment
         )
     }
-    
+
     // SQLite total removed - use PostgreSQL's COALESCE(SUM(...), 0) or sumOrZero() instead
 }
 
@@ -150,7 +150,7 @@ public struct AggregateFunction<QueryValue>: QueryExpression, Sendable {
     var arguments: [QueryFragment]
     var order: QueryFragment?
     var filter: QueryFragment?
-    
+
     init(
         _ name: QueryFragment,
         isDistinct: Bool = false,
@@ -164,7 +164,7 @@ public struct AggregateFunction<QueryValue>: QueryExpression, Sendable {
         self.order = order
         self.filter = filter
     }
-    
+
     public var queryFragment: QueryFragment {
         var query: QueryFragment = "\(name)("
         if isDistinct {
@@ -208,11 +208,11 @@ private struct IlikeOperator<
     RHS: QueryExpression<String>
 >: QueryExpression {
     typealias QueryValue = Bool
-    
+
     let string: LHS
     let pattern: RHS
     let escape: Character?
-    
+
     var queryFragment: QueryFragment {
         var query: QueryFragment = "(\(string.queryFragment) ILIKE \(pattern.queryFragment)"
         if let escape {
@@ -272,7 +272,7 @@ where QueryValue: _OptionalPromotable, QueryValue._Optionalized.Wrapped: Numeric
     public func abs() -> some QueryExpression<QueryValue> {
         QueryFunction("abs", self)
     }
-    
+
     /// Wraps this numeric query expression with the `sign` function.
     ///
     /// - Returns: An expression wrapped with the `sign` function.
@@ -305,7 +305,7 @@ extension QueryExpression where QueryValue: _OptionalProtocol {
     ) -> CoalesceFunction<QueryValue.Wrapped> {
         CoalesceFunction([lhs.queryFragment, rhs.queryFragment])
     }
-    
+
     /// Applies each side of the operator to the `coalesce` function
     ///
     /// ```swift
@@ -327,7 +327,7 @@ extension QueryExpression where QueryValue: _OptionalProtocol {
     ) -> CoalesceFunction<QueryValue> {
         CoalesceFunction([lhs.queryFragment, rhs.queryFragment])
     }
-    
+
     @_documentation(visibility: private)
     @available(
         *,
@@ -384,7 +384,7 @@ extension QueryExpression where QueryValue == String {
             return QueryFunction("ltrim", self)
         }
     }
-    
+
     /// Creates an expression invoking the `octet_length` function with the given string expression.
     ///
     /// - Returns: An integer expression of the `octet_length` function wrapping the given string.
@@ -409,7 +409,7 @@ extension QueryExpression where QueryValue == String {
     ) -> some QueryExpression<QueryValue> {
         QueryFunction("replace", self, other, replacement)
     }
-    
+
     /// Wraps this string expression with the `rtrim` function.
     ///
     /// - Parameter characters: Characters to trim.
@@ -423,7 +423,7 @@ extension QueryExpression where QueryValue == String {
             return QueryFunction("rtrim", self)
         }
     }
-    
+
     /// Creates an expression invoking the `substr` function.
     ///
     /// - Parameters:
@@ -441,7 +441,7 @@ extension QueryExpression where QueryValue == String {
             return QueryFunction("substr", self, offset)
         }
     }
-    
+
     /// Wraps this string expression with the `trim` function.
     ///
     /// - Parameter characters: Characters to trim.
@@ -455,10 +455,9 @@ extension QueryExpression where QueryValue == String {
             return QueryFunction("trim", self)
         }
     }
-    
-    
+
     // SQLite unhex and unicode removed - use PostgreSQL's decode(string, 'hex') and ascii() instead
-    
+
     /// Wraps this string expression with the `upper` function.
     ///
     /// - Returns: An expression wrapped with the `upper` function.
@@ -472,13 +471,12 @@ extension QueryExpression where QueryValue == String {
 public struct QueryFunction<QueryValue>: QueryExpression {
     let name: QueryFragment
     let arguments: [QueryFragment]
-    
-    
+
     public init<each Argument: QueryExpression>(_ name: QueryFragment, _ arguments: repeat each Argument) {
         self.name = name
         self.arguments = Array(repeat each arguments)
     }
-    
+
     public var queryFragment: QueryFragment {
         "\(name)(\(arguments.joined(separator: ", ")))"
     }
@@ -487,15 +485,15 @@ public struct QueryFunction<QueryValue>: QueryExpression {
 /// A query expression of a coalesce function.
 public struct CoalesceFunction<QueryValue>: QueryExpression {
     private let arguments: [QueryFragment]
-    
+
     fileprivate init(_ arguments: [QueryFragment]) {
         self.arguments = arguments
     }
-    
+
     public var queryFragment: QueryFragment {
         "coalesce(\(arguments.joined(separator: ", ")))"
     }
-    
+
     public static func ?? <T: _OptionalProtocol<QueryValue>>(
         lhs: some QueryExpression<T>,
         rhs: Self

@@ -1,9 +1,9 @@
-//import Foundation
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import RecordsTestSupport
+// import Testing
 //
-//@Suite("SELECT Tests")
-//struct SelectTests {
+// @Suite("SELECT Tests")
+// struct SelectTests {
 //
 //    @Test("Basic SELECT all columns")
 //    func selectAll() {
@@ -155,10 +155,10 @@
 //            sql: #"SELECT "reminders"."id", "reminders"."assignedUserID", "reminders"."dueDate", "reminders"."isCompleted", "reminders"."isFlagged", "reminders"."notes", "reminders"."priority", "reminders"."remindersListID", "reminders"."title", "reminders"."updatedAt" FROM "reminders" WHERE ("reminders"."title" LIKE $1)"#
 //        )
 //    }
-//}
+// }
 //
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //    @Suite struct SelectTests {
 //        //
 //        @Test func count() {
@@ -302,9 +302,9 @@
 //            }
 //        }
 //    }
-//}
+// }
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //    @Suite struct SelectionTests {
 //        @Test func remindersListAndReminderCount() {
 //            let baseQuery =
@@ -362,4 +362,4 @@
 //            }
 //        }
 //    }
-//}
+// }

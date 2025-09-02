@@ -1,9 +1,9 @@
-//import Foundation
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import RecordsTestSupport
+// import Testing
 //
-//@Suite("JOIN Tests")
-//struct JoinTests {
+// @Suite("JOIN Tests")
+// struct JoinTests {
 //
 //    @Test("Basic INNER JOIN")
 //    func innerJoin() {
@@ -144,42 +144,42 @@
 //            sql: #"SELECT DISTINCT "remindersLists"."title" FROM "reminders" JOIN "remindersLists" ON ("reminders"."remindersListID" = "remindersLists"."id")"#
 //        )
 //    }
-//}
+// }
 //
 //// Helper types for selections with optional values
-//@Selection
-//private struct JoinedRow {
+// @Selection
+// private struct JoinedRow {
 //    let reminderTitle: String
 //    let userName: String?
-//}
+// }
 //
-//@Selection
-//private struct MultiJoinRow {
+// @Selection
+// private struct MultiJoinRow {
 //    let reminderTitle: String
 //    let listTitle: String
 //    let userName: String?
-//}
+// }
 //
-//@Selection
-//private struct AggregateRow {
+// @Selection
+// private struct AggregateRow {
 //    let title: String
 //    let count: Int
-//}
+// }
 //
-//@Selection
-//private struct RightJoinRow {
+// @Selection
+// private struct RightJoinRow {
 //    let reminderTitle: String?
 //    let listTitle: String
-//}
+// }
 //
-//@Selection
-//private struct FullJoinRow {
+// @Selection
+// private struct FullJoinRow {
 //    let reminderTitle: String?
 //    let userName: String?
-//}
+// }
 //
-//@Selection
-//private struct HavingRow {
+// @Selection
+// private struct HavingRow {
 //    let title: String
 //    let count: Int
-//}
+// }

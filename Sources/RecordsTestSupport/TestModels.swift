@@ -1,6 +1,6 @@
 import Foundation
-import StructuredQueriesPostgres
 import Records
+import StructuredQueriesPostgres
 
 // MARK: - Test Models
 

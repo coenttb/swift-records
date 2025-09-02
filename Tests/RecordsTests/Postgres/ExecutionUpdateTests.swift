@@ -9,7 +9,7 @@ import Testing
 )
 struct ExecutionUpdateTests {
     @Dependency(\.defaultDatabase) var db
-    
+
 //    @Test("UPDATE with toggle and RETURNING")
 //    func updateToggleWithReturning() async throws {
 //        do {

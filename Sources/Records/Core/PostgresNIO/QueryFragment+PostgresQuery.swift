@@ -8,7 +8,7 @@ extension PostgresQuery {
         var parameterIndex = 0
         var bindings = PostgresBindings()
         var sqlParts: [String] = []
-        
+
         // Process segments to build SQL and bindings
         for segment in fragment.segments {
             switch segment {
@@ -20,12 +20,12 @@ extension PostgresQuery {
                 fragment.appendBinding(binding, to: &bindings)
             }
         }
-        
+
         // Join the SQL parts and normalize whitespace
         let sql = sqlParts.joined()
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "  ", with: " ")
-        
+
         self = PostgresQuery(unsafeSQL: sql, binds: bindings)
     }
 }
@@ -33,7 +33,7 @@ extension PostgresQuery {
 extension QueryFragment {
     /// Converts a QueryFragment to a PostgresQuery for execution
     package func toPostgresQuery() -> PostgresQuery { .init(from: self) }
-    
+
     func appendBinding(_ binding: QueryBinding, to bindings: inout PostgresBindings) {
         switch binding {
         case .null:

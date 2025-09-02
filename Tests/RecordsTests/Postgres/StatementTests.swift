@@ -1,9 +1,9 @@
-//import Foundation
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import RecordsTestSupport
+// import Testing
 //
-//@Suite("PostgresStatement Tests")
-//struct StatementTests {
+// @Suite("PostgresStatement Tests")
+// struct StatementTests {
 //    @Test("Parameter placeholder conversion")
 //    func parameterPlaceholderConversion() {
 //        let fragment: QueryFragment = "SELECT * FROM users WHERE id = \(1)"
@@ -25,4 +25,4 @@
 //        #expect(postgresStatement.query.sql.contains("$2"))
 //        #expect(postgresStatement.query.binds.count == 2)
 //    }
-//}
+// }

@@ -2,7 +2,7 @@ import Foundation
 import RecordsTestSupport
 import Testing
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //  @Suite struct CommonTableExpressionTests {
 //    @Dependency(\.defaultDatabase) var db
 //
@@ -524,52 +524,52 @@ import Testing
 //      }
 //    }
 //  }
-//}
+// }
 //
-//@Table @Selection
-//private struct Fibonacci {
+// @Table @Selection
+// private struct Fibonacci {
 //  let n: Int
 //  let prevFib: Int
 //  let fib: Int
-//}
+// }
 //
-//@Table @Selection
-//private struct IncompleteReminder {
+// @Table @Selection
+// private struct IncompleteReminder {
 //  let isFlagged: Bool
 //  let title: String
-//}
+// }
 //
-//@Table @Selection
-//private struct Count {
+// @Table @Selection
+// private struct Count {
 //  let value: Int
-//}
+// }
 //
-//extension Count {
+// extension Count {
 //  init(queryOutput: Int) {
 //    value = queryOutput
 //  }
 //  var queryOutput: Int {
 //    value
 //  }
-//}
+// }
 //
-//@Table
-//struct Employee {
+// @Table
+// struct Employee {
 //  let id: Int
 //  let name: String
 //  let bossID: Int?
 //  var height = 100
-//}
+// }
 //
-//@Table @Selection
-//struct EmployeeReport {
+// @Table @Selection
+// struct EmployeeReport {
 //  let id: Int
 //  let height: Int
 //  let name: String
-//}
+// }
 //
-//@Table @Selection
-//struct ReminderCount {
+// @Table @Selection
+// struct ReminderCount {
 //  let count: Int
 //  var queryOutput: Int {
 //    count
@@ -577,10 +577,10 @@ import Testing
 //  init(queryOutput: Int) {
 //    count = queryOutput
 //  }
-//}
+// }
 //
-//@Table @Selection
-//struct RemindersListCount {
+// @Table @Selection
+// struct RemindersListCount {
 //  let count: Int
 //  var queryOutput: Int {
 //    count
@@ -588,10 +588,9 @@ import Testing
 //  init(queryOutput: Int) {
 //    count = queryOutput
 //  }
-//}
+// }
 
-
-//extension SnapshotTests {
+// extension SnapshotTests {
 //    @Suite struct CommonTableExpressionTests {
 //        @Test func countTwoTables() {
 //            assertInlineSnapshot(
@@ -767,4 +766,4 @@ import Testing
 //            }
 //        }
 //    }
-//}
+// }

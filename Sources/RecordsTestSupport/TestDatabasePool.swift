@@ -1,6 +1,6 @@
 import Foundation
-import StructuredQueriesPostgres
 import PostgresNIO
+import StructuredQueriesPostgres
 
 // MARK: - TestDatabasePool
 
@@ -10,13 +10,13 @@ extension Database {
         private var inUse: Set<TestDatabaseEntry> = []
         private let configuration: PostgresClient.Configuration?
         private var isShuttingDown = false
-        
+
         /// Shared instance for test suites
         static let shared = TestDatabasePool()
-        
+
         init(configuration: PostgresClient.Configuration? = nil) {
             self.configuration = configuration
-            
+
             // Register cleanup on process termination
             atexit {
                 Task.detached {
@@ -24,23 +24,23 @@ extension Database {
                 }
             }
         }
-        
+
         /// Acquire a test database from the pool
         func acquire(setupMode: TestDatabaseSetupMode = .withSchema) async throws -> TestDatabase {
             guard !isShuttingDown else {
                 throw Database.Error.poolShuttingDown
             }
-            
+
             // Always create a new database with a unique schema for proper isolation
             // This ensures parallel tests never interfere with each other
             let database = try await Database.testDatabase(
                 configuration: configuration,
                 prefix: "pool"
             )
-            
+
             let entry = TestDatabaseEntry(database: database)
             inUse.insert(entry)
-            
+
             switch setupMode {
             case .empty:
                 break
@@ -50,10 +50,10 @@ extension Database {
                 try await database.createTestSchema()
                 try await database.insertSampleData()
             }
-            
+
             return database
         }
-        
+
         /// Release a test database back to the pool
         func release(_ database: TestDatabase) async {
             // Find and remove from in-use set
@@ -61,16 +61,16 @@ extension Database {
             if let entry = entry {
                 inUse.remove(entry)
             }
-            
+
             // Always cleanup immediately since we create fresh databases
             // This ensures connections are closed properly
             await database.cleanup()
         }
-        
+
         /// Shutdown all databases and close connections
         func shutdownAll() async {
             isShuttingDown = true
-            
+
             // Close all in-use databases
             for entry in inUse {
                 await entry.database.cleanup()
@@ -95,16 +95,15 @@ extension Database {
 private struct TestDatabaseEntry: Hashable {
     let database: Database.TestDatabase
     let id = UUID()
-    
+
     static func == (lhs: TestDatabaseEntry, rhs: TestDatabaseEntry) -> Bool {
         lhs.id == rhs.id
     }
-    
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 }
-
 
 // MARK: - TestDatabase Extensions for Pool
 
@@ -125,7 +124,7 @@ extension Database.TestDatabase {
             try await db.execute(dropTablesQuery)
         }
     }
-    
+
     /// Creates the standard test schema for testing
     func createTestSchema() async throws {
         try await self.write { db in
@@ -138,7 +137,7 @@ extension Database.TestDatabase {
                     "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             // Create posts table
             try await db.execute("""
                 CREATE TABLE posts (
@@ -149,7 +148,7 @@ extension Database.TestDatabase {
                     "publishedAt" TIMESTAMP
                 )
             """)
-            
+
             // Create comments table
             try await db.execute("""
                 CREATE TABLE comments (
@@ -160,7 +159,7 @@ extension Database.TestDatabase {
                     "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             // Create tags table
             try await db.execute("""
                 CREATE TABLE tags (
@@ -168,7 +167,7 @@ extension Database.TestDatabase {
                     name TEXT UNIQUE NOT NULL
                 )
             """)
-            
+
             // Create post_tags junction table
             try await db.execute("""
                 CREATE TABLE post_tags (
@@ -179,7 +178,7 @@ extension Database.TestDatabase {
             """)
         }
     }
-    
+
     /// Inserts sample data for testing
     func insertSampleData() async throws {
         try await self.write { db in
@@ -189,27 +188,27 @@ extension Database.TestDatabase {
                 ('Alice', 'alice@example.com', CURRENT_TIMESTAMP),
                 ('Bob', 'bob@example.com', CURRENT_TIMESTAMP)
             """)
-            
+
             // Insert posts
             try await db.execute("""
                 INSERT INTO posts ("userId", title, content, "publishedAt") VALUES
                 (1, 'First Post', 'Hello World', CURRENT_TIMESTAMP),
                 (2, 'Second Post', 'Another post', NULL)
             """)
-            
+
             // Insert comments
             try await db.execute("""
                 INSERT INTO comments ("postId", "userId", text, "createdAt") VALUES
                 (1, 2, 'Great post!', CURRENT_TIMESTAMP)
             """)
-            
+
             // Insert tags
             try await db.execute("""
                 INSERT INTO tags (name) VALUES
                 ('Swift'),
                 ('Database')
             """)
-            
+
             // Insert post-tag relationships
             try await db.execute("""
                 INSERT INTO post_tags ("postId", "tagId") VALUES
@@ -219,4 +218,3 @@ extension Database.TestDatabase {
         }
     }
 }
-

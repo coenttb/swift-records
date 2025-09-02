@@ -34,7 +34,7 @@ extension Database.Writer {
             }
         }
     }
-    
+
     /// Executes a block of operations within a database transaction and rolls it back.
     ///
     /// This is useful for testing or dry-run operations where you want to see
@@ -65,7 +65,7 @@ extension Database.Writer {
             }
         }
     }
-    
+
     /// Executes a block of operations within a savepoint.
     ///
     /// Savepoints allow you to rollback to a specific point within a transaction

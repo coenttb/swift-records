@@ -1,10 +1,10 @@
-//import Foundation
-//import InlineSnapshotTesting
-//import StructuredQueriesPostgres
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import InlineSnapshotTesting
+// import StructuredQueriesPostgres
+// import RecordsTestSupport
+// import Testing
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //    struct ScalarFunctionTests {
 //        @Table
 //        struct User {
@@ -136,4 +136,4 @@
 //            }
 //        }
 //    }
-//}
+// }

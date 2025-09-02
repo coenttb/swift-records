@@ -1,9 +1,9 @@
-//import Foundation
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import RecordsTestSupport
+// import Testing
 //
-//@Suite("PostgreSQL-Specific Aggregate Functions Tests")
-//struct AggregateFunctionsTests {
+// @Suite("PostgreSQL-Specific Aggregate Functions Tests")
+// struct AggregateFunctionsTests {
 //
 //  @Test("STRING_AGG function")
 //  func stringAggregation() {
@@ -170,4 +170,4 @@
 //      sql: #"SELECT "reminders"."remindersListID", json_agg("reminders"."title") FROM "reminders" GROUP BY "reminders"."remindersListID" ORDER BY "reminders"."remindersListID""#
 //    )
 //  }
-//}
+// }

@@ -5,9 +5,9 @@
 //  Created by Coen ten Thije Boonkkamp on 25/08/2025.
 //
 
+import EnvironmentVariables
 import Foundation
 import RecordsTestSupport
-import EnvironmentVariables
 import Testing
 
 extension URL {

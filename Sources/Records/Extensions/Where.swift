@@ -9,7 +9,7 @@ import Foundation
 import StructuredQueriesPostgres
 
 extension Where {
-    
+
     /// A select statement for the filtered table's row count.
     ///
     /// - Parameter filter: A `FILTER` clause to apply to the aggregation.

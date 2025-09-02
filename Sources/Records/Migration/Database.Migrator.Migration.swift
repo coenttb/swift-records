@@ -12,10 +12,10 @@ extension Database.Migrator {
     struct Migration {
         /// The unique identifier for the migration
         let identifier: String
-        
+
         /// When the migration was applied
         let appliedAt: Date
-        
+
         /// Create a new migration record
         init(identifier: String, appliedAt: Date = Date()) {
             self.identifier = identifier
@@ -32,20 +32,20 @@ extension Database.Migrator.Migration {
         let migrations = try await Database.Migrator.Migration.fetchAll(db)
         return Set(migrations.map { $0.identifier })
     }
-    
+
     /// Record a migration as applied
     static func recordMigration(identifier: String, db: any Database.Connection.`Protocol`) async throws {
         try await Database.Migrator.Migration.insert {
             Database.Migrator.Migration(identifier: identifier)
         }.execute(db)
     }
-    
+
     /// Check if a specific migration has been applied
     static func hasApplied(identifier: String, db: any Database.Connection.`Protocol`) async throws -> Bool {
         let migration = try await Database.Migrator.Migration
             .where { $0.identifier == identifier }
             .fetchOne(db)
-        
+
         return migration != nil
     }
 }

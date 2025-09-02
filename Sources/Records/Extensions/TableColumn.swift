@@ -12,7 +12,7 @@ extension TableColumn {
             separator: separator.queryFragment
         )
     }
-    
+
     /// PostgreSQL ARRAY_AGG function - aggregates values into an array
     public func arrayAgg() -> some QueryExpression<String?> {
         SimpleAggregateFunction<String?>(
@@ -20,7 +20,7 @@ extension TableColumn {
             column: queryFragment
         )
     }
-    
+
     /// PostgreSQL JSON_AGG function - aggregates values into a JSON array
     public func jsonAgg() -> some QueryExpression<String?> {
         SimpleAggregateFunction<String?>(
@@ -28,7 +28,7 @@ extension TableColumn {
             column: queryFragment
         )
     }
-    
+
     /// PostgreSQL JSONB_AGG function - aggregates values into a JSONB array
     public func jsonbAgg() -> some QueryExpression<String?> {
         SimpleAggregateFunction<String?>(
@@ -48,7 +48,7 @@ extension TableColumn where Value: Numeric {
             column: queryFragment
         )
     }
-    
+
     /// PostgreSQL STDDEV_POP function - population standard deviation
     public func stddevPop() -> some QueryExpression<Double> {
         SimpleAggregateFunction<Double>(
@@ -56,7 +56,7 @@ extension TableColumn where Value: Numeric {
             column: queryFragment
         )
     }
-    
+
     /// PostgreSQL STDDEV_SAMP function - sample standard deviation
     public func stddevSamp() -> some QueryExpression<Double> {
         SimpleAggregateFunction<Double>(
@@ -64,7 +64,7 @@ extension TableColumn where Value: Numeric {
             column: queryFragment
         )
     }
-    
+
     /// PostgreSQL VARIANCE function - variance
     public func variance() -> some QueryExpression<Double> {
         SimpleAggregateFunction<Double>(
@@ -80,13 +80,13 @@ private struct SimpleAggregateFunction<QueryValue: QueryBindable>: QueryExpressi
     let name: String
     let column: QueryFragment
     let separator: QueryFragment?
-    
+
     init(name: String, column: QueryFragment, separator: QueryFragment? = nil) {
         self.name = name
         self.column = column
         self.separator = separator
     }
-    
+
     var queryFragment: QueryFragment {
         if let separator = separator {
             // For functions like string_agg that take two arguments

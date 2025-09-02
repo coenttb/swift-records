@@ -40,7 +40,7 @@ extension Database {
         /// }
         /// ```
         func read<T: Sendable>(_ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T) async throws -> T
-        
+
         func close() async throws
     }
 }

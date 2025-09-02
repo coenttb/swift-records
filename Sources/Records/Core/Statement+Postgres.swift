@@ -19,7 +19,7 @@ extension Statement {
     public func execute(_ db: any Database.Connection.`Protocol`) async throws where QueryValue == () {
         try await db.execute(self)
     }
-    
+
     /// Returns an array of all values fetched from the database.
     ///
     /// For example:
@@ -38,11 +38,13 @@ extension Statement {
     /// - Parameter db: A database connection.
     /// - Returns: An array of all values decoded from the database.
     @inlinable
-    public func fetchAll(_ db: any Database.Connection.`Protocol`) async throws -> [QueryValue.QueryOutput]
+    public func fetchAll(
+        _ db: any Database.Connection.`Protocol`
+    ) async throws -> [QueryValue.QueryOutput]
     where QueryValue: QueryRepresentable {
         try await db.fetchAll(self)
     }
-    
+
     /// Returns a single value fetched from the database.
     ///
     /// For example:
@@ -81,7 +83,6 @@ extension SelectStatement where QueryValue == (), Joins == () {
     }
 }
 
-
 extension SelectStatement where QueryValue == (), Joins == () {
     /// Returns an array of all values fetched from the database.
     ///
@@ -97,7 +98,7 @@ extension SelectStatement where QueryValue == (), Joins == () {
         let query = self.selectStar()
         return try await query.fetchAll(db)
     }
-    
+
     /// Returns a single value fetched from the database.
     ///
     /// This extension enables the pattern: `User.all.fetchOne(db)`

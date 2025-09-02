@@ -1,9 +1,9 @@
-//import Foundation
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import RecordsTestSupport
+// import Testing
 //
-//@Suite("Advanced Features Tests")
-//struct AdvancedFeaturesTests {
+// @Suite("Advanced Features Tests")
+// struct AdvancedFeaturesTests {
 //
 //  @Suite("PostgreSQL-Specific Features Supported by StructuredQueries")
 //  struct SupportedFeatures {
@@ -231,4 +231,4 @@
 //      #expect(expectedSQL.contains("OVER (PARTITION BY"))
 //    }
 //  }
-//}
+// }

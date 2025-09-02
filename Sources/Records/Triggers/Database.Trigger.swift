@@ -28,7 +28,6 @@ extension Database {
     }
 }
 
-
 // MARK: - PostgreSQL-Specific Helpers
 
 extension Database.Connection.`Protocol` {

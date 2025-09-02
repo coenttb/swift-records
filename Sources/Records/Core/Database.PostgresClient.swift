@@ -1,7 +1,7 @@
 import Foundation
-import PostgresNIO
-import NIOSSL
 import Logging
+import NIOSSL
+import PostgresNIO
 
 extension Database {
     /// PostgresClient adapter that conforms to Database.Writer protocol.
@@ -51,7 +51,7 @@ extension PostgresClient: Database.Writer {
             return try await block(connection)
         }
     }
-    
+
     /// Performs a database operation that can write.
     ///
     /// Uses PostgresClient's connection pooling to get a connection
@@ -64,7 +64,7 @@ extension PostgresClient: Database.Writer {
             return try await block(connection)
         }
     }
-    
+
     /// Closes the client.
     ///
     /// Note: PostgresClient manages its lifecycle through the run() method.

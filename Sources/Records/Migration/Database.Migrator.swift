@@ -132,13 +132,13 @@ extension Database {
         /// - warning: This flag can destroy data! Use only during development.
         public var eraseDatabaseOnSchemaChange = false
         #endif
-        
+
         /// The foreign key checking strategy.
         public var foreignKeyChecks: ForeignKeyChecks = .deferred
-        
+
         /// Creates a new database migrator.
         public init() {}
-        
+
         /// Registers a migration.
         ///
         /// - Parameters:
@@ -155,10 +155,10 @@ extension Database {
                 reportIssue("Migration with identifier '\(identifier)' is already registered")
                 return
             }
-            
+
             migrations.append((identifier, migrate))
         }
-        
+
         /// Migrates the database.
         ///
         /// - Parameter writer: The database to migrate.
@@ -166,7 +166,7 @@ extension Database {
             try await writer.write { db in
                 // Create migration tracking table if it doesn't exist
                 try await createMigrationTable(db)
-                
+
                 // Get applied migrations
                 let appliedIdentifiers = try await fetchAppliedIdentifiers(db)
                 #if DEBUG
@@ -179,7 +179,7 @@ extension Database {
                     }
                 }
                 #endif
-                
+
                 // Apply pending migrations
                 for (identifier, migrate) in migrations {
                     if !appliedIdentifiers.contains(identifier) {
@@ -188,7 +188,7 @@ extension Database {
                 }
             }
         }
-        
+
         /// Returns the identifiers of applied migrations.
         ///
         /// - Parameter db: A database connection.
@@ -196,7 +196,7 @@ extension Database {
         public func appliedIdentifiers(_ db: any Database.Connection.`Protocol`) async throws -> Set<String> {
             try await fetchAppliedIdentifiers(db)
         }
-        
+
         /// Returns true if the database has completed all registered migrations.
         ///
         /// - Parameter writer: The database to check.
@@ -207,9 +207,9 @@ extension Database {
                 return migrations.allSatisfy { appliedIdentifiers.contains($0.identifier) }
             }
         }
-        
+
         // MARK: - Private Methods
-        
+
         private func createMigrationTable(_ db: any Database.Connection.`Protocol`) async throws {
             try await db.execute("""
                 CREATE TABLE IF NOT EXISTS __database_migrations (
@@ -218,7 +218,7 @@ extension Database {
                 )
             """)
         }
-        
+
         private func fetchAppliedIdentifiers(_ db: any Database.Connection.`Protocol`) async throws -> Set<String> {
             // Ensure migration table exists (for backward compatibility)
             try await db.execute("""
@@ -227,11 +227,11 @@ extension Database {
                     "appliedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             // Fetch applied migrations using the Database.Migrator.Migration table
             return try await Database.Migrator.Migration.fetchAppliedIdentifiers(db)
         }
-        
+
         private func applyMigration(
             identifier: String,
             migrate: @Sendable (any Database.Connection.`Protocol`) async throws -> Void,
@@ -239,18 +239,18 @@ extension Database {
         ) async throws {
             // Handle foreign key checks
             let restoreForeignKeys = foreignKeyChecks == .deferred
-            
+
             if restoreForeignKeys {
                 try await db.execute("SET session_replication_role = 'replica'")
             }
-            
+
             do {
                 // Run the migration
                 try await migrate(db)
-                
+
                 // Record the migration using structured insert
                 try await Database.Migrator.Migration.recordMigration(identifier: identifier, db: db)
-                
+
                 if restoreForeignKeys {
                     try await db.execute("SET session_replication_role = 'origin'")
                 }
@@ -261,7 +261,7 @@ extension Database {
                 throw error
             }
         }
-        
+
         private func hasSchemaChanges(_ db: any Database.Connection.`Protocol`, appliedIdentifiers: Set<String>) async throws -> Bool {
             // Check if migrations have been removed or renamed
             let registeredIdentifiers = Set(migrations.map(\.identifier))
@@ -271,7 +271,7 @@ extension Database {
         private func eraseDatabaseContent(_ db: any Database.Connection.`Protocol`) async throws {
             // Drop all tables in the public schema
             try await db.execute("""
-                DO $$ 
+                DO $$
                 DECLARE
                     r RECORD;
                 BEGIN

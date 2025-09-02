@@ -2,8 +2,8 @@ import Foundation
 import RecordsTestSupport
 import Testing
 //
-//@Suite("Binding Tests")
-//struct BindingTests {
+// @Suite("Binding Tests")
+// struct BindingTests {
 //    @Dependency(\.defaultDatabase) var db
 //    
 //    @Test("UUID Bytes Binding")
@@ -166,12 +166,12 @@ import Testing
 //        #expect(results.count == 1)
 //        // Date comparison might have minor precision differences
 //    }
-//}
+// }
 //
-//@Table
-//private struct Record: Equatable, Sendable {
+// @Table
+// private struct Record: Equatable, Sendable {
 //    // PostgreSQL has native UUID type, no need for BytesRepresentation
 //    var id: UUID
 //    var name = ""
 //    var duration: UInt64 = 0
-//}
+// }

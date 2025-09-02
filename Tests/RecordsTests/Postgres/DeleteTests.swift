@@ -14,7 +14,7 @@ extension SnapshotTests {
                 RETURNING "reminders"."id"
                 """
             }
-            
+
             assertInlineSnapshot(
                 of: Reminder.count(),
                 as: .sql
@@ -25,7 +25,7 @@ extension SnapshotTests {
                 """
             }
         }
-        
+
         @Test func deleteID1() {
             assertInlineSnapshot(
                 of: Reminder.delete().where { $0.id == 1 }.returning(\.self),
@@ -37,7 +37,7 @@ extension SnapshotTests {
                 RETURNING "id", "assignedUserID", "dueDate", "isCompleted", "isFlagged", "notes", "priority", "remindersListID", "title", "updatedAt"
                 """
             }
-            
+
             assertInlineSnapshot(
                 of: Reminder.count(),
                 as: .sql
@@ -48,7 +48,7 @@ extension SnapshotTests {
                 """
             }
         }
-        
+
         @Test func primaryKey() {
             assertInlineSnapshot(
                 of: Reminder.delete(Reminder(id: 1, remindersListID: 1)),
@@ -59,7 +59,7 @@ extension SnapshotTests {
                 WHERE ("reminders"."id" = 1)
                 """
             }
-            
+
             assertInlineSnapshot(
                 of: Reminder.count(),
                 as: .sql
@@ -73,10 +73,13 @@ extension SnapshotTests {
     }
 }
 
+@Suite(
+    "DELETE Tests",
+    .dependency(\.envVars, .development),
+    .dependency(\.defaultDatabase, Database.TestDatabase.withSampleData())
+)
+ struct DeleteTests {
 
-//@Suite("DELETE Tests")
-//struct DeleteTests {
-//
 //    @Test("Basic DELETE all rows")
 //    func deleteAll() {
 //        assertQuery(
@@ -86,13 +89,17 @@ extension SnapshotTests {
 //    }
 //
 //    @Test("DELETE with WHERE clause")
-//    func deleteWithWhere() {
-//        assertQuery(
+//    func deleteWithWhere() async throws {
+//        try await assertExecute(
 //            Reminder
 //                .where { $0.id == 1 }
-//                .delete(),
-//            sql: #"DELETE FROM "reminders" WHERE ("reminders"."id" = $1)"#
-//        )
+//                .delete()
+//        ) {
+//            """
+//            DELETE FROM "reminders"
+//            WHERE ("reminders"."id" = 1)
+//            """
+//        }
 //    }
 //
 //    @Test("DELETE with complex WHERE")
@@ -221,6 +228,4 @@ extension SnapshotTests {
 //            sql: #"DELETE FROM "reminders" WHERE ("reminders"."id" = $1) RETURNING "id", "assignedUserID", "dueDate", "isCompleted", "isFlagged", "notes", "priority", "remindersListID", "title", "updatedAt""#
 //        )
 //    }
-//}
-
-
+ }

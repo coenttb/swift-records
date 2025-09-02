@@ -1,10 +1,10 @@
-//import Foundation
-//import InlineSnapshotTesting
-//import StructuredQueriesPostgres
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import InlineSnapshotTesting
+// import StructuredQueriesPostgres
+// import RecordsTestSupport
+// import Testing
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //    @MainActor
 //    @Suite struct AggregateFunctionsTests {
 //        @Table
@@ -169,4 +169,4 @@
 //            }
 //        }
 //    }
-//}
+// }

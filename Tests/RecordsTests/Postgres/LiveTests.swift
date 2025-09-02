@@ -3,27 +3,27 @@ import RecordsTestSupport
 import Testing
 //
 //// Selection types must be at module level
-//@Selection
-//struct JoinResult {
+// @Selection
+// struct JoinResult {
 //    let reminderTitle: String
 //    let listTitle: String
-//}
+// }
 //
-//@Selection
-//struct ListCount {
+// @Selection
+// struct ListCount {
 //    let listId: Int
 //    let listTitle: String
 //    let reminderCount: Int
-//}
+// }
 //
-//@Selection
-//struct ListWithCount {
+// @Selection
+// struct ListWithCount {
 //    let listTitle: String
 //    let reminderCount: Int
-//}
+// }
 //
-//@Suite("PostgreSQL Live Database Tests", .serialized)
-//struct LiveTests {
+// @Suite("PostgreSQL Live Database Tests", .serialized)
+// struct LiveTests {
 //    let db: TestDatabase
 //    
 //    init() async throws {
@@ -397,4 +397,4 @@ import Testing
 //            throw error
 //        }
 //    }
-//}
+// }

@@ -1,10 +1,10 @@
-//import Foundation
-//import InlineSnapshotTesting
-//import StructuredQueriesPostgres
-//import RecordsTestSupport
-//import Testing
+// import Foundation
+// import InlineSnapshotTesting
+// import StructuredQueriesPostgres
+// import RecordsTestSupport
+// import Testing
 //
-//extension SnapshotTests {
+// extension SnapshotTests {
 //  @Suite struct WhereTests {
 //    @Test func and() {
 //      assertInlineSnapshot(
@@ -157,4 +157,4 @@
 //      }
 //    }
 //  }
-//}
+// }

@@ -1,6 +1,6 @@
 import Foundation
-import PostgresNIO
 import Logging
+import PostgresNIO
 
 extension Database {
     /// A wrapper that manages a PostgresClient and its lifecycle.
@@ -25,7 +25,7 @@ extension Database {
     public final class ClientRunner: Writer, @unchecked Sendable {
         private let client: PostgresClient
         private let runTask: Task<Void, Never>
-        
+
         /// Creates a new ClientRunner with the given PostgresClient.
         ///
         /// The client's run() method is automatically started in a background task.
@@ -34,31 +34,31 @@ extension Database {
             self.runTask = Task {
                 await client.run()
             }
-            
+
             // Give the client a moment to initialize
             try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
         }
-        
+
         /// Performs a read-only database operation.
         public func read<T: Sendable>(
             _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
             try await client.read(block)
         }
-        
+
         /// Performs a database operation that can write.
         public func write<T: Sendable>(
             _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
             try await client.write(block)
         }
-        
+
         /// Closes the client and cancels the run task.
         public func close() async throws {
             runTask.cancel()
             try await client.close()
         }
-        
+
         deinit {
             // Cancel the run task when this wrapper is deallocated
             // This ensures we don't leave hanging tasks when tests complete
@@ -83,23 +83,23 @@ extension Database {
         var config = configuration
         config.options.minimumConnections = 1
         config.options.maximumConnections = 1
-        
+
         // Set useful defaults
         config.options.connectionIdleTimeout = .seconds(60)
         config.options.keepAliveBehavior = .init(
             frequency: .seconds(30),
             query: "SELECT 1"
         )
-        
+
         let client = if let logger = logger {
             PostgresClient(configuration: config, backgroundLogger: logger)
         } else {
             PostgresClient(configuration: config)
         }
-        
+
         return await ClientRunner(client: client)
     }
-    
+
     /// Creates a ClientRunner with connection pooling.
     ///
     /// This provides similar behavior to the old Database.pool with
@@ -115,20 +115,20 @@ extension Database {
         var config = configuration
         config.options.minimumConnections = minConnections
         config.options.maximumConnections = maxConnections
-        
+
         // Set useful defaults
         config.options.connectionIdleTimeout = .seconds(60)
         config.options.keepAliveBehavior = .init(
             frequency: .seconds(30),
             query: "SELECT 1"
         )
-        
+
         let client = if let logger = logger {
             PostgresClient(configuration: config, backgroundLogger: logger)
         } else {
             PostgresClient(configuration: config)
         }
-        
+
         return await ClientRunner(client: client)
     }
 }
@@ -138,7 +138,7 @@ extension Database {
 extension Database {
     /// Alias for single-connection client
     public typealias Queue = ClientRunner
-    
+
     /// Alias for pooled client
     public typealias Pool = ClientRunner
 }

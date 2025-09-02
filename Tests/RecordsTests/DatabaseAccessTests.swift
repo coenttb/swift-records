@@ -1,8 +1,8 @@
-import Testing
+import Dependencies
+import DependenciesTestSupport
 import Foundation
 import RecordsTestSupport
-import DependenciesTestSupport
-import Dependencies
+import Testing
 
 @Suite(
     "Database Access Patterns",
@@ -11,21 +11,21 @@ import Dependencies
 )
 struct DatabaseAccessTests {
     @Dependency(\.defaultDatabase) var database
-    
+
     @Test("Database.Queue serializes all operations")
     func testDatabaseQueueSerializesAccess() async throws {
         // Test that operations are serialized
         let results = await withTaskGroup(of: Int?.self) { group in
             for i in 1...10 {
                 group.addTask {
-                    try? await database.write { db in
+                    try? await database.write { _ in
                         // Simulate work
                         try? await Task.sleep(nanoseconds: 10_000)
                         return i
                     }
                 }
             }
-            
+
             var collected: [Int] = []
             for await result in group {
                 if let result = result {
@@ -34,11 +34,11 @@ struct DatabaseAccessTests {
             }
             return collected
         }
-        
+
         // All operations should complete
         #expect(results.count == 10)
     }
-    
+
     @Test(
         "Database.Pool allows concurrent reads",
         .disabled("only run in isolation for proper results")
@@ -46,10 +46,10 @@ struct DatabaseAccessTests {
     func testDatabasePoolAllowsConcurrentReads() async throws {
         // Note: This test uses the same database interface but conceptually tests
         // that reads can happen concurrently when using a pool
-        
+
         // Track concurrent execution
         let startTime = Date()
-        
+
         let readTimes = await withTaskGroup(of: TimeInterval.self) { group in
             for _ in 1...5 {
                 group.addTask {
@@ -62,23 +62,23 @@ struct DatabaseAccessTests {
                     return Date().timeIntervalSince(taskStart)
                 }
             }
-            
+
             var times: [TimeInterval] = []
             for await duration in group {
                 times.append(duration)
             }
             return times
         }
-        
+
         let totalTime = Date().timeIntervalSince(startTime)
-        
+
         // If reads are concurrent, total time should be less than serialized time
         // Serialized would be 5 * 0.1 = 0.5+ seconds
         // With connection overhead, concurrent might be around 0.2-0.5 seconds
         #expect(totalTime < 0.55, "Reads should complete faster than fully serialized (took \(totalTime)s)")
         #expect(readTimes.count == 5)
     }
-    
+
     @Test("Database.Pool serializes write operations")
     func testDatabasePoolSerializesWrites() async throws {
         do {
@@ -86,22 +86,22 @@ struct DatabaseAccessTests {
             try await database.write { db in
                 try await db.execute("DELETE FROM users")
             }
-            
+
             // Track write order
             actor WriteCollector {
                 var writes: [Int] = []
-                
+
                 func recordWrite(_ value: Int) {
                     writes.append(value)
                 }
-                
+
                 func getWrites() -> [Int] {
                     return writes
                 }
             }
-            
+
             let collector = WriteCollector()
-            
+
             // Concurrent write attempts
             await withTaskGroup(of: Void.self) { group in
                 for i in 1...5 {
@@ -109,7 +109,7 @@ struct DatabaseAccessTests {
                         try? await database.write { db in
                             // Record when this write starts
                             await collector.recordWrite(i)
-                            
+
                             // Perform actual write
                             try? await User.insert {
                                 User.Draft(
@@ -118,19 +118,19 @@ struct DatabaseAccessTests {
                                     createdAt: Date()
                                 )
                             }.execute(db)
-                            
+
                             // Simulate some work
                             try? await Task.sleep(nanoseconds: 10_000_000) // 0.01 seconds
                         }
                     }
                 }
             }
-            
+
             let writeOrder = await collector.getWrites()
-            
+
             // All writes should complete
             #expect(writeOrder.count == 5)
-            
+
             // Verify all users were created
             let userCount = try await database.read { db in
                 try await User.fetchCount(db)
@@ -141,7 +141,7 @@ struct DatabaseAccessTests {
             throw error
         }
     }
-    
+
     @Test("Read and write operations don't interfere")
     func testReadWriteIsolation() async throws {
         do {
@@ -149,7 +149,7 @@ struct DatabaseAccessTests {
             let initialCount = try await database.read { db in
                 try await User.fetchCount(db)
             }
-            
+
             // Concurrent reads and writes
             await withTaskGroup(of: String.self) { group in
                 // Add some write operations
@@ -171,7 +171,7 @@ struct DatabaseAccessTests {
                         }
                     }
                 }
-                
+
                 // Add some read operations
                 for i in 1...3 {
                     group.addTask {
@@ -185,14 +185,14 @@ struct DatabaseAccessTests {
                         }
                     }
                 }
-                
+
                 // Collect results
                 var results: [String] = []
                 for await result in group {
                     results.append(result)
                 }
             }
-            
+
             // Final count should reflect all writes
             let finalCount = try await database.read { db in
                 try await User.fetchCount(db)
@@ -203,43 +203,43 @@ struct DatabaseAccessTests {
             throw error
         }
     }
-    
+
     @Test("Actor-based concurrency handles multiple operations")
     func testActorBasedConcurrency() async throws {
         // Test that our actor-based approach handles concurrent access correctly
         actor Counter {
             var value = 0
-            
+
             func increment() -> Int {
                 value += 1
                 return value
             }
         }
-        
+
         let counter = Counter()
-        
+
         // Many concurrent operations
         let results = await withTaskGroup(of: Int.self) { group in
             for _ in 1...20 {
                 group.addTask {
                     let count = await counter.increment()
-                    
+
                     // Also do a database operation
                     _ = try? await database.read { db in
                         try await User.fetchCount(db)
                     }
-                    
+
                     return count
                 }
             }
-            
+
             var values: Set<Int> = []
             for await value in group {
                 values.insert(value)
             }
             return values
         }
-        
+
         // Each increment should produce a unique value
         #expect(results.count == 20)
         #expect(results.contains(20))

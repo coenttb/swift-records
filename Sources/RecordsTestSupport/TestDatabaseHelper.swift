@@ -1,8 +1,8 @@
+import Dependencies
 import Foundation
-import Testing
 @testable import Records
 import StructuredQueriesPostgres
-import Dependencies
+import Testing
 
 // MARK: - Test Database Setup
 
@@ -19,7 +19,7 @@ extension Database.Writer {
                     "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             // Create posts table
             try await db.execute("""
                 CREATE TABLE posts (
@@ -30,7 +30,7 @@ extension Database.Writer {
                     "publishedAt" TIMESTAMP
                 )
             """)
-            
+
             // Create comments table
             try await db.execute("""
                 CREATE TABLE comments (
@@ -41,7 +41,7 @@ extension Database.Writer {
                     "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             // Create tags table
             try await db.execute("""
                 CREATE TABLE tags (
@@ -49,7 +49,7 @@ extension Database.Writer {
                     name TEXT UNIQUE NOT NULL
                 )
             """)
-            
+
             // Create post_tags junction table
             try await db.execute("""
                 CREATE TABLE post_tags (
@@ -60,7 +60,7 @@ extension Database.Writer {
             """)
         }
     }
-    
+
     /// Inserts sample data for testing
     package func insertSampleData() async throws {
         try await self.write { db in
@@ -70,27 +70,27 @@ extension Database.Writer {
                 ('Alice', 'alice@example.com', CURRENT_TIMESTAMP),
                 ('Bob', 'bob@example.com', CURRENT_TIMESTAMP)
             """)
-            
+
             // Insert posts
             try await db.execute("""
                 INSERT INTO posts ("userId", title, content, "publishedAt") VALUES
                 (1, 'First Post', 'Hello World', CURRENT_TIMESTAMP),
                 (2, 'Second Post', 'Another post', NULL)
             """)
-            
+
             // Insert comments
             try await db.execute("""
                 INSERT INTO comments ("postId", "userId", text, "createdAt") VALUES
                 (1, 2, 'Great post!', CURRENT_TIMESTAMP)
             """)
-            
+
             // Insert tags
             try await db.execute("""
                 INSERT INTO tags (name) VALUES
                 ('Swift'),
                 ('Database')
             """)
-            
+
             // Insert post-tag relationships
             try await db.execute("""
                 INSERT INTO post_tags ("postId", "tagId") VALUES
@@ -107,23 +107,23 @@ extension Database.Writer {
 private actor DatabaseManager {
     private var database: Database.TestDatabase?
     private let setupMode: Database.TestDatabaseSetupMode
-    
+
     init(setupMode: Database.TestDatabaseSetupMode) {
         self.setupMode = setupMode
     }
-    
+
     func getDatabase() async throws -> Database.TestDatabase {
         if let database = database {
             return database
         }
-        
+
         // Acquire from pool
         let mode = setupMode // Capture locally to avoid race
         let newDatabase = try await Database.TestDatabasePool.shared.acquire(setupMode: mode)
         self.database = newDatabase
         return newDatabase
     }
-    
+
     func cleanup() async {
         if let database = database {
             // Release back to pool
@@ -136,12 +136,12 @@ private actor DatabaseManager {
 /// A wrapper that defers async database creation until first use
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     private let manager: DatabaseManager
-    
+
     enum SetupMode {
         case empty
         case withSchema
         case withSampleData
-        
+
         var databaseSetupMode: Database.TestDatabaseSetupMode {
             switch self {
             case .empty: return .empty
@@ -150,29 +150,29 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
             }
         }
     }
-    
+
     init(setupMode: SetupMode) {
         self.manager = DatabaseManager(setupMode: setupMode.databaseSetupMode)
     }
-    
+
     public func read<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         let database = try await manager.getDatabase()
         return try await database.read(block)
     }
-    
+
     public func write<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
         let database = try await manager.getDatabase()
         return try await database.write(block)
     }
-    
+
     public func close() async throws {
 //        await manager.cleanup()
     }
-    
+
     deinit {
         // Schedule cleanup to return database to pool
         // Note: Task.detached is used here intentionally:
@@ -191,7 +191,7 @@ extension Database.TestDatabase {
     public static func withSchema() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withSchema)
     }
-    
+
     /// Creates a test database factory that will set up schema and sample data on first use (synchronous for dependency injection)
     public static func withSampleData() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withSampleData)

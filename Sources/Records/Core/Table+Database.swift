@@ -2,8 +2,6 @@ import StructuredQueriesPostgres
 
 // MARK: - Extensions for SelectStatement with nothing selected
 
-
-
 // MARK: - Table Extensions for static convenience methods
 
 extension Table where Self: QueryRepresentable, Self.QueryOutput == Self {
@@ -23,7 +21,7 @@ extension Table where Self: QueryRepresentable, Self.QueryOutput == Self {
         let query = Self.all.selectStar()
         return try await query.fetchAll(db)
     }
-    
+
     /// Fetches the first record from the table.
     ///
     /// For example:
@@ -39,7 +37,7 @@ extension Table where Self: QueryRepresentable, Self.QueryOutput == Self {
         let query = Self.all.selectStar().limit(1)
         return try await query.fetchOne(db)
     }
-    
+
     /// Returns the number of records in the table.
     ///
     /// For example:
