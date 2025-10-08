@@ -53,12 +53,12 @@ enum Priority: Int, Codable, QueryBindable {
     case medium
     case high
 }
-//
-// extension Reminder.TableColumns {
-//  var isPastDue: some QueryExpression<Bool> {
-//    !isCompleted && #sql("coalesce(\(dueDate), date('now')) < date('now')")
-//  }
-// }
+
+extension Reminder.TableColumns {
+    var isHighPriority: some QueryExpression<Bool> {
+        priority == Priority.high
+    }
+}
 //
 @Table
 struct Tag: Codable, Equatable, Identifiable {

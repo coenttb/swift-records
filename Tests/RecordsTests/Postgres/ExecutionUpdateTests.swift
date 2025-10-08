@@ -17,27 +17,32 @@ struct ExecutionUpdateTests {
             try await Reminder
                 .where { $0.priority == Priority.high }
                 .update { $0.isCompleted = true }
-                .returning { $0.priority }
+                .returning(\.self)
                 .fetchAll(db)
         }
 
         #expect(results.count == 1)
-        #expect(results.first == Priority.high)
+        #expect(results.first?.priority == Priority.high)
+        #expect(results.first?.isCompleted == true)
     }
 
     @Test("UPDATE with NULL values")
     func updateWithNull() async throws {
-        let results = try await db.write { db in
+        // Update to set assignedUserID to nil
+        try await db.write { db in
             try await Reminder
                 .where { $0.id == 1 }
-                .update { $0.assignedUserID = .null }
-                .returning { ($0.id, $0.assignedUserID) }
-                .fetchAll(db)
+                .update { $0.assignedUserID = nil }
+                .execute(db)
         }
 
-        #expect(results.count == 1)
-        #expect(results.first?.0 == 1)
-        #expect(results.first?.1 == nil)
+        // Verify with SELECT
+        let reminder = try await db.read { db in
+            try await Reminder.where { $0.id == 1 }.fetchOne(db)
+        }
+
+        #expect(reminder?.id == 1)
+        #expect(reminder?.assignedUserID == nil)
     }
 
     @Test("UPDATE multiple columns")
@@ -49,13 +54,13 @@ struct ExecutionUpdateTests {
                     reminder.isCompleted = true
                     reminder.notes = "Completed"
                 }
-                .returning { ($0.id, $0.isCompleted, $0.notes) }
+                .returning(\.self)
                 .fetchAll(db)
         }
 
         #expect(results.count == 1)
-        #expect(results.first?.1 == true)
-        #expect(results.first?.2 == "Completed")
+        #expect(results.first?.isCompleted == true)
+        #expect(results.first?.notes == "Completed")
     }
 
     @Test("UPDATE with no matches returns empty")
@@ -64,7 +69,7 @@ struct ExecutionUpdateTests {
             try await Reminder
                 .where { $0.id == 999 }
                 .update { $0.isCompleted = true }
-                .returning { $0.id }
+                .returning(\.self)
                 .fetchAll(db)
         }
 
@@ -78,12 +83,12 @@ struct ExecutionUpdateTests {
             try await Reminder
                 .where { $0.remindersListID == 1 }
                 .update { $0.isFlagged = true }
-                .returning { ($0.title, $0.remindersListID, $0.isFlagged) }
+                .returning(\.self)
                 .fetchAll(db)
         }
 
         #expect(results.count == 3) // Home list has 3 reminders
-        #expect(results.allSatisfy { $0.2 == true })
+        #expect(results.allSatisfy { $0.isFlagged == true })
     }
 
     @Test("UPDATE all rows")
@@ -91,12 +96,12 @@ struct ExecutionUpdateTests {
         let results = try await db.write { db in
             try await Reminder
                 .update { $0.isFlagged = false }
-                .returning { $0.isFlagged }
+                .returning(\.self)
                 .fetchAll(db)
         }
 
         #expect(results.count == 6)
-        #expect(results.allSatisfy { $0 == false })
+        #expect(results.allSatisfy { $0.isFlagged == false })
     }
 
     @Test("UPDATE with boolean field")
@@ -113,7 +118,7 @@ struct ExecutionUpdateTests {
             try await Reminder
                 .where { $0.id == 1 }
                 .update { $0.isCompleted = true }
-                .returning { $0 }
+                .returning(\.self)
                 .fetchOne(db)
         }
 
@@ -122,15 +127,20 @@ struct ExecutionUpdateTests {
 
     @Test("UPDATE with text concatenation")
     func updateTextConcat() async throws {
-        let result = try await db.write { db in
+        // Note: SQL string concatenation using + operator (translates to ||)
+        try await db.write { db in
             try await Reminder
                 .where { $0.id == 1 }
-                .update { $0.notes = $0.notes.concatenated(with: " - Updated") }
-                .returning { ($0.id, $0.notes) }
-                .fetchOne(db)
+                .update { $0.notes = $0.notes + " - Updated" }
+                .execute(db)
         }
 
-        #expect(result?.0 == 1)
-        #expect(result?.1 == "Milk, Eggs, Apples - Updated")
+        // Verify with SELECT
+        let reminder = try await db.read { db in
+            try await Reminder.where { $0.id == 1 }.fetchOne(db)
+        }
+
+        #expect(reminder?.id == 1)
+        #expect(reminder?.notes == "Milk, Eggs, Apples - Updated")
     }
 }

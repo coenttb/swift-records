@@ -123,6 +123,13 @@ extension Reminder.TableColumns {
     }
 }
 
+//extension Reminder.TableColumns {
+//    var isHighPriority: some QueryExpression<Bool> {
+//        self.priority == Priority.high
+//    }
+//}
+
+
 // MARK: - Reminder Query Helpers
 
 extension Reminder {

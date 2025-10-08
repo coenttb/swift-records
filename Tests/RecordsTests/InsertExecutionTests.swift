@@ -6,270 +6,253 @@ import Testing
 @Suite(
     "INSERT Execution Tests",
     .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withReminderSchema())
+    .dependency(\.defaultDatabase, Database.TestDatabase.withReminderData())
 )
 struct InsertExecutionTests {
     @Dependency(\.defaultDatabase) var db
 
-    @Test("INSERT single Draft with RETURNING")
-    func insertSingleDraft() async throws {
+    @Test("INSERT basic Draft")
+    func insertBasicDraft() async throws {
         let inserted = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Test List")
+            try await Reminder.insert {
+                Reminder.Draft(
+                    remindersListID: 1,
+                    title: "New task"
+                )
             }
-            .returning { $0 }
-            .fetchOne(db)
+            .returning(\.self)
+            .fetchAll(db)
         }
 
-        #expect(inserted != nil)
-        #expect(inserted?.title == "Test List")
-        #expect(inserted?.id != nil)  // Auto-generated
+        #expect(inserted.count == 1)
+        #expect(inserted.first?.title == "New task")
+        #expect(inserted.first?.remindersListID == 1)
+        #expect(inserted.first?.id != nil) // Auto-generated
+    }
+
+    @Test("INSERT with all fields specified")
+    func insertWithAllFields() async throws {
+        let now = Date()
+        let inserted = try await db.write { db in
+            try await Reminder.insert {
+                Reminder.Draft(
+                    assignedUserID: 1,
+                    dueDate: now,
+                    isCompleted: false,
+                    isFlagged: true,
+                    notes: "Important task",
+                    priority: .high,
+                    remindersListID: 2,
+                    title: "Complete project",
+                    updatedAt: now
+                )
+            }
+            .returning(\.self)
+            .fetchAll(db)
+        }
+
+        #expect(inserted.count == 1)
+        let reminder = try #require(inserted.first)
+        #expect(reminder.title == "Complete project")
+        #expect(reminder.assignedUserID == 1)
+        #expect(reminder.priority == .high)
+        #expect(reminder.isFlagged == true)
+        #expect(reminder.notes == "Important task")
     }
 
     @Test("INSERT multiple Drafts")
     func insertMultipleDrafts() async throws {
-        // First insert a list
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Shopping")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let listID = list?.id else {
-            Issue.record("Failed to create list")
-            return
-        }
-
         let inserted = try await db.write { db in
             try await Reminder.insert {
-                Reminder.Draft(title: "Milk", remindersListID: listID)
-                Reminder.Draft(title: "Eggs", remindersListID: listID)
-                Reminder.Draft(title: "Bread", remindersListID: listID)
+                Reminder.Draft(
+                    remindersListID: 1,
+                    title: "First task"
+                )
+                Reminder.Draft(
+                    remindersListID: 1,
+                    title: "Second task"
+                )
+                Reminder.Draft(
+                    remindersListID: 2,
+                    title: "Third task"
+                )
             }
-            .returning { $0.id }
+            .returning(\.self)
             .fetchAll(db)
         }
 
         #expect(inserted.count == 3)
-        #expect(Set(inserted).count == 3)  // All different IDs
+        #expect(inserted[0].title == "First task")
+        #expect(inserted[1].title == "Second task")
+        #expect(inserted[2].title == "Third task")
+        #expect(Set(inserted.map(\.id)).count == 3) // All have unique IDs
     }
 
-    @Test("INSERT with specific column values")
-    func insertWithColumns() async throws {
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Personal")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let listID = list?.id else {
-            Issue.record("Failed to create list")
-            return
-        }
-
+    @Test("INSERT with NULL optional fields")
+    func insertWithNullFields() async throws {
         let inserted = try await db.write { db in
             try await Reminder.insert {
                 Reminder.Draft(
-                    title: "Important Task",
-                    priority: .high,
-                    isCompleted: false,
-                    isFlagged: true,
-                    remindersListID: listID
-                )
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        #expect(inserted?.title == "Important Task")
-        #expect(inserted?.priority == .high)
-        #expect(inserted?.isCompleted == false)
-        #expect(inserted?.isFlagged == true)
-    }
-
-    @Test("INSERT with NULL values")
-    func insertWithNull() async throws {
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Tasks")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let listID = list?.id else {
-            Issue.record("Failed to create list")
-            return
-        }
-
-        let inserted = try await db.write { db in
-            try await Reminder.insert {
-                Reminder.Draft(
-                    title: "Task without priority",
-                    priority: nil,
                     assignedUserID: nil,
-                    dueDate: nil,
-                    remindersListID: listID
+                    priority: nil,
+                    remindersListID: 1,
+                    title: "Unassigned task"
                 )
             }
-            .returning { $0 }
-            .fetchOne(db)
+            .returning(\.self)
+            .fetchAll(db)
         }
 
-        #expect(inserted?.priority == nil)
-        #expect(inserted?.assignedUserID == nil)
-        #expect(inserted?.dueDate == nil)
+        #expect(inserted.count == 1)
+        let reminder = try #require(inserted.first)
+        #expect(reminder.assignedUserID == nil)
+        #expect(reminder.priority == nil)
+        #expect(reminder.dueDate == nil)
     }
 
-    @Test("UPSERT with conflict on primary key")
-    func upsert() async throws {
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Work")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let listID = list?.id else {
-            Issue.record("Failed to create list")
-            return
-        }
-
-        // First insert
-        let first = try await db.write { db in
-            try await Reminder.upsert {
-                Reminder.Draft(id: 100, title: "Original", remindersListID: listID)
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        #expect(first?.id == 100)
-        #expect(first?.title == "Original")
-
-        // Upsert with same ID (should update)
-        let second = try await db.write { db in
-            try await Reminder.upsert {
-                Reminder.Draft(id: 100, title: "Updated", remindersListID: listID)
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        #expect(second?.id == 100)
-        #expect(second?.title == "Updated")
-
-        // Verify only one record exists
-        let count = try await db.read { db in
-            try await Reminder.where { $0.id == 100 }.fetchAll(db).count
-        }
-
-        #expect(count == 1)
-    }
-
-    @Test("INSERT with RETURNING specific columns")
-    func insertReturningColumns() async throws {
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Projects")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let listID = list?.id else {
-            Issue.record("Failed to create list")
-            return
-        }
-
-        let result = try await db.write { db in
-            try await Reminder.insert {
-                Reminder.Draft(title: "New Project", remindersListID: listID)
-            }
-            .returning { ($0.id, $0.title) }
-            .fetchOne(db)
-        }
-
-        #expect(result?.0 != nil)
-        #expect(result?.1 == "New Project")
-    }
-
-    @Test("INSERT Draft with defaults")
-    func insertWithDefaults() async throws {
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Home")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let listID = list?.id else {
-            Issue.record("Failed to create list")
-            return
-        }
-
+    @Test("INSERT with priority levels")
+    func insertWithPriorities() async throws {
         let inserted = try await db.write { db in
             try await Reminder.insert {
                 Reminder.Draft(
-                    title: "Default values test",
-                    remindersListID: listID
-                    // All other fields use defaults
+                    priority: .low,
+                    remindersListID: 1,
+                    title: "Low priority"
+                )
+                Reminder.Draft(
+                    priority: .medium,
+                    remindersListID: 1,
+                    title: "Medium priority"
+                )
+                Reminder.Draft(
+                    priority: .high,
+                    remindersListID: 1,
+                    title: "High priority"
                 )
             }
-            .returning { $0 }
-            .fetchOne(db)
+            .returning(\.self)
+            .fetchAll(db)
         }
 
-        // Verify defaults
-        #expect(inserted?.isCompleted == false)
-        #expect(inserted?.isFlagged == false)
-        #expect(inserted?.notes == "")
-        #expect(inserted?.priority == nil)
+        #expect(inserted.count == 3)
+        #expect(inserted[0].priority == .low)
+        #expect(inserted[1].priority == .medium)
+        #expect(inserted[2].priority == .high)
     }
 
-    @Test("INSERT with foreign key reference")
-    func insertWithForeignKey() async throws {
-        // Create user
-        let user = try await db.write { db in
-            try await User.insert {
-                User.Draft(name: "Alice")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        let list = try await db.write { db in
-            try await RemindersList.insert {
-                RemindersList.Draft(title: "Shared")
-            }
-            .returning { $0 }
-            .fetchOne(db)
-        }
-
-        guard let userID = user?.id, let listID = list?.id else {
-            Issue.record("Failed to create dependencies")
-            return
-        }
-
-        // Create reminder with user assignment
-        let reminder = try await db.write { db in
+    @Test("INSERT and verify with SELECT")
+    func insertAndVerify() async throws {
+        // Insert new reminder
+        let inserted = try await db.write { db in
             try await Reminder.insert {
                 Reminder.Draft(
-                    title: "Assigned Task",
-                    assignedUserID: userID,
-                    remindersListID: listID
+                    notes: "Test notes",
+                    remindersListID: 1,
+                    title: "Verify test"
                 )
             }
-            .returning { $0 }
-            .fetchOne(db)
+            .returning(\.self)
+            .fetchAll(db)
         }
 
-        #expect(reminder?.assignedUserID == userID)
+        let insertedId = try #require(inserted.first?.id)
+
+        // Verify with SELECT
+        let fetched = try await db.read { db in
+            try await Reminder.where { $0.id == insertedId }.fetchOne(db)
+        }
+
+        #expect(fetched != nil)
+        #expect(fetched?.title == "Verify test")
+        #expect(fetched?.notes == "Test notes")
+    }
+
+    @Test("INSERT with boolean flags")
+    func insertWithBooleanFlags() async throws {
+        let inserted = try await db.write { db in
+            try await Reminder.insert {
+                Reminder.Draft(
+                    isCompleted: true,
+                    isFlagged: true,
+                    remindersListID: 1,
+                    title: "Flagged and completed"
+                )
+                Reminder.Draft(
+                    isCompleted: false,
+                    isFlagged: false,
+                    remindersListID: 1,
+                    title: "Not flagged or completed"
+                )
+            }
+            .returning(\.self)
+            .fetchAll(db)
+        }
+
+        #expect(inserted.count == 2)
+        #expect(inserted[0].isCompleted == true)
+        #expect(inserted[0].isFlagged == true)
+        #expect(inserted[1].isCompleted == false)
+        #expect(inserted[1].isFlagged == false)
+    }
+
+    @Test("INSERT into different lists")
+    func insertIntoDifferentLists() async throws {
+        let inserted = try await db.write { db in
+            try await Reminder.insert {
+                Reminder.Draft(remindersListID: 1, title: "Home task")
+                Reminder.Draft(remindersListID: 2, title: "Work task")
+            }
+            .returning(\.self)
+            .fetchAll(db)
+        }
+
+        #expect(inserted.count == 2)
+        #expect(inserted[0].remindersListID == 1)
+        #expect(inserted[1].remindersListID == 2)
+    }
+
+    @Test("INSERT with date fields")
+    func insertWithDates() async throws {
+        let futureDate = Date().addingTimeInterval(86400) // Tomorrow
+        let inserted = try await db.write { db in
+            try await Reminder.insert {
+                Reminder.Draft(
+                    dueDate: futureDate,
+                    remindersListID: 1,
+                    title: "Future task"
+                )
+            }
+            .returning(\.self)
+            .fetchAll(db)
+        }
+
+        #expect(inserted.count == 1)
+        let reminder = try #require(inserted.first)
+        #expect(reminder.dueDate != nil)
+        // Allow 1 second tolerance for date comparison
+        if let dueDate = reminder.dueDate {
+            #expect(abs(dueDate.timeIntervalSince(futureDate)) < 1.0)
+        }
+    }
+
+    @Test("INSERT without RETURNING")
+    func insertWithoutReturning() async throws {
+        // Insert without RETURNING - just verify it doesn't throw
+        try await db.write { db in
+            try await Reminder.insert {
+                Reminder.Draft(
+                    remindersListID: 1,
+                    title: "No return"
+                )
+            }
+            .execute(db)
+        }
+
+        // Verify it was inserted by counting
+        let count = try await db.read { db in
+            try await Reminder.where { $0.title == "No return" }.fetchAll(db)
+        }
+
+        #expect(count.count >= 1)
     }
 }

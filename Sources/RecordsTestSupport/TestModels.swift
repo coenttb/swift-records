@@ -2,15 +2,10 @@ import Foundation
 import Records
 import StructuredQueriesPostgres
 
-// MARK: - Test Models
-
-@Table
-package struct User {
-    package let id: Int
-    package var name: String
-    package var email: String
-    package var createdAt: Date
-}
+// MARK: - Test Models (User/Post Schema)
+//
+// Note: User and Tag are defined in ReminderSchema.swift (upstream-aligned)
+// These models are for swift-records-specific tests
 
 @Table
 package struct Post {
@@ -28,12 +23,6 @@ package struct Comment {
     package var userId: Int
     package var text: String
     package var createdAt: Date
-}
-
-@Table
-package struct Tag {
-    package let id: Int
-    package var name: String
 }
 
 @Table

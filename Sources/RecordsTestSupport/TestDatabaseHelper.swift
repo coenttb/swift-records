@@ -214,6 +214,24 @@ extension Database.Writer {
                 (2, 1),
                 (3, 4)
             """)
+
+            // Reset sequences to correct values after explicit inserts
+            // Note: PostgreSQL creates sequences with quoted table names as "tableName_columnName_seq"
+            try await db.execute("""
+                SELECT setval(pg_get_serial_sequence('"remindersLists"', 'id'), (SELECT MAX(id) FROM "remindersLists"))
+            """)
+
+            try await db.execute("""
+                SELECT setval(pg_get_serial_sequence('"reminders"', 'id'), (SELECT MAX(id) FROM "reminders"))
+            """)
+
+            try await db.execute("""
+                SELECT setval(pg_get_serial_sequence('"users"', 'id'), (SELECT MAX(id) FROM "users"))
+            """)
+
+            try await db.execute("""
+                SELECT setval(pg_get_serial_sequence('"tags"', 'id'), (SELECT MAX(id) FROM "tags"))
+            """)
         }
     }
 }
