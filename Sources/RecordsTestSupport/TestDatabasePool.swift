@@ -49,6 +49,11 @@ extension Database {
             case .withSampleData:
                 try await database.createTestSchema()
                 try await database.insertSampleData()
+            case .withReminderSchema:
+                try await database.createReminderSchema()
+            case .withReminderData:
+                try await database.createReminderSchema()
+                try await database.insertReminderSampleData()
             }
 
             return database
@@ -85,9 +90,16 @@ extension Database {
 extension Database {
     /// Setup mode for test databases
     public enum TestDatabaseSetupMode: Sendable {
+        /// Empty database (no tables)
         case empty
+        /// User/Post schema (swift-records-specific tests)
         case withSchema
+        /// User/Post schema with sample data
         case withSampleData
+        /// Reminder schema (matches upstream swift-structured-queries)
+        case withReminderSchema
+        /// Reminder schema with sample data
+        case withReminderData
     }
 }
 
