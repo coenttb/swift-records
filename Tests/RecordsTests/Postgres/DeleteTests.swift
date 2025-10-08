@@ -16,7 +16,7 @@ extension SnapshotTests {
             }
 
             assertInlineSnapshot(
-                of: Reminder.count(),
+                of: Reminder.select { _ in .count() },
                 as: .sql
             ) {
                 """
@@ -39,7 +39,7 @@ extension SnapshotTests {
             }
 
             assertInlineSnapshot(
-                of: Reminder.count(),
+                of: Reminder.select { _ in .count() },
                 as: .sql
             ) {
                 """
@@ -61,7 +61,7 @@ extension SnapshotTests {
             }
 
             assertInlineSnapshot(
-                of: Reminder.count(),
+                of: Reminder.select { _ in .count() },
                 as: .sql
             ) {
                 """
