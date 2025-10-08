@@ -16,7 +16,6 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.all.fetchAll(db)
         }
-
         #expect(reminders.count == 6)
     }
 
@@ -25,7 +24,6 @@ struct SelectExecutionTests {
         let completed = try await db.read { db in
             try await Reminder.where { $0.isCompleted }.fetchAll(db)
         }
-
         #expect(completed.count == 1)
         #expect(completed.allSatisfy { $0.isCompleted })
     }
@@ -35,7 +33,6 @@ struct SelectExecutionTests {
         let titles = try await db.read { db in
             try await Reminder.select { $0.title }.fetchAll(db)
         }
-
         #expect(titles.count == 6)
         #expect(titles.contains("Groceries"))
         #expect(titles.contains("Haircut"))
@@ -46,7 +43,6 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.all.order(by: \.title).fetchAll(db)
         }
-
         #expect(reminders.count == 6)
         #expect(reminders.first?.title == "Finish report")
     }
@@ -56,7 +52,6 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.all.limit(3).fetchAll(db)
         }
-
         #expect(reminders.count == 3)
     }
 
@@ -65,11 +60,9 @@ struct SelectExecutionTests {
         let all = try await db.read { db in
             try await Reminder.all.order(by: \.id).fetchAll(db)
         }
-
         let offset = try await db.read { db in
             try await Reminder.all.order(by: \.id).limit(3, offset: 2).fetchAll(db)
         }
-
         #expect(offset.count == 3)
         #expect(offset.first?.id == all[2].id)
     }
@@ -79,11 +72,9 @@ struct SelectExecutionTests {
         let withoutUser = try await db.read { db in
             try await Reminder.where { $0.assignedUserID == nil }.fetchAll(db)
         }
-
         let withUser = try await db.read { db in
             try await Reminder.where { $0.assignedUserID != nil }.fetchAll(db)
         }
-
         #expect(withoutUser.count + withUser.count == 6)
     }
 
@@ -93,7 +84,6 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.where { $0.priority.in(priorities) }.fetchAll(db)
         }
-
         #expect(reminders.count == 2)
         #expect(reminders.allSatisfy { $0.priority == .low || $0.priority == .high })
     }
@@ -103,56 +93,14 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.where { $0.title.ilike("%e%") }.fetchAll(db)
         }
-
         #expect(reminders.count > 0)
         #expect(reminders.allSatisfy { $0.title.lowercased().contains("e") })
     }
 
     // TODO: Tuple selection not yet supported - need to rewrite using proper result type
     // @Test("SELECT with JOIN")
-    // func selectWithJoin() async throws {
-    //     let results = try await db.read { db in
-    //         try await Reminder
-    //             .join(RemindersList.all) { $0.remindersListID.eq($1.id) }
-    //             .select { reminder, list in
-    //                 (reminder.title, list.title)
-    //             }
-    //             .fetchAll(db)
-    //     }
-    //
-    //     #expect(results.count == 6)
-    //     #expect(results.contains { $0.0 == "Groceries" && $0.1 == "Home" })
-    // }
-
-    // TODO: Tuple selection not yet supported - need to rewrite using proper result type
     // @Test("SELECT with GROUP BY and aggregate")
-    // func selectWithGroupBy() async throws {
-    //     let counts = try await db.read { db in
-    //         try await Reminder
-    //             .group(by: \.remindersListID)
-    //             .select { ($0.remindersListID, $0.id.count()) }
-    //             .fetchAll(db)
-    //     }
-    //
-    //     #expect(counts.count == 2)
-    //     #expect(counts.contains { $0.0 == 1 && $0.1 == 3 }) // Home list has 3 reminders
-    //     #expect(counts.contains { $0.0 == 2 && $0.1 == 3 }) // Work list has 3 reminders
-    // }
-
-    // TODO: Tuple selection not yet supported - need to rewrite using proper result type
     // @Test("SELECT with HAVING clause")
-    // func selectWithHaving() async throws {
-    //     let lists = try await db.read { db in
-    //         try await Reminder
-    //             .group(by: \.remindersListID)
-    //             .having { $0.id.count() >= 3 }
-    //             .select { ($0.remindersListID, $0.id.count()) }
-    //             .fetchAll(db)
-    //     }
-    //
-    //     #expect(lists.count == 2)
-    //     #expect(lists.allSatisfy { $0.1 >= 3 })
-    // }
 
     @Test("SELECT with boolean operators")
     func selectWithBooleanOperators() async throws {
@@ -161,7 +109,6 @@ struct SelectExecutionTests {
                 .where { $0.isCompleted || $0.isFlagged }
                 .fetchAll(db)
         }
-
         #expect(results.count == 3)
         #expect(results.allSatisfy { $0.isCompleted || $0.isFlagged })
     }
@@ -171,7 +118,6 @@ struct SelectExecutionTests {
         let high = try await db.read { db in
             try await Reminder.where { $0.priority == Priority.high }.fetchAll(db)
         }
-
         #expect(high.count == 1)
         #expect(high.first?.priority == .high)
     }
@@ -181,7 +127,6 @@ struct SelectExecutionTests {
         let distinctLists = try await db.read { db in
             try await Reminder.distinct().select { $0.remindersListID }.fetchAll(db)
         }
-
         #expect(distinctLists.count == 2)
     }
 
@@ -190,7 +135,6 @@ struct SelectExecutionTests {
         let highPriority = try await db.read { db in
             try await Reminder.where { $0.isHighPriority }.fetchAll(db)
         }
-
         #expect(highPriority.count == 1)
         #expect(highPriority.first?.priority == .high)
     }
@@ -200,7 +144,6 @@ struct SelectExecutionTests {
         let reminder = try await db.read { db in
             try await Reminder.where { $0.id == 1 }.fetchOne(db)
         }
-
         #expect(reminder != nil)
         #expect(reminder?.id == 1)
         #expect(reminder?.title == "Groceries")
@@ -211,7 +154,6 @@ struct SelectExecutionTests {
         let reminder = try await db.read { db in
             try await Reminder.where { $0.id == 999 }.fetchOne(db)
         }
-
         #expect(reminder == nil)
     }
 
@@ -220,7 +162,6 @@ struct SelectExecutionTests {
         let reminder = try await db.read { db in
             try await Reminder.find(1).fetchOne(db)
         }
-
         #expect(reminder != nil)
         #expect(reminder?.id == 1)
     }
@@ -230,7 +171,6 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.find([1, 2, 3]).fetchAll(db)
         }
-
         #expect(reminders.count == 3)
         #expect(reminders.map(\.id).sorted() == [1, 2, 3])
     }

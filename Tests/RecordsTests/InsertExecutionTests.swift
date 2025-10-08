@@ -28,6 +28,13 @@ struct InsertExecutionTests {
         #expect(inserted.first?.title == "New task")
         #expect(inserted.first?.remindersListID == 1)
         #expect(inserted.first?.id != nil) // Auto-generated
+
+        // Cleanup
+        if let id = inserted.first?.id {
+            try await db.write { db in
+                try await Reminder.find(id).delete().execute(db)
+            }
+        }
     }
 
     @Test("INSERT with all fields specified")
@@ -58,6 +65,11 @@ struct InsertExecutionTests {
         #expect(reminder.priority == .high)
         #expect(reminder.isFlagged == true)
         #expect(reminder.notes == "Important task")
+
+        // Cleanup
+        try await db.write { db in
+            try await Reminder.find(reminder.id).delete().execute(db)
+        }
     }
 
     @Test("INSERT multiple Drafts")
@@ -86,6 +98,12 @@ struct InsertExecutionTests {
         #expect(inserted[1].title == "Second task")
         #expect(inserted[2].title == "Third task")
         #expect(Set(inserted.map(\.id)).count == 3) // All have unique IDs
+
+        // Cleanup
+        let ids = inserted.map(\.id)
+        try await db.write { db in
+            try await Reminder.find(ids).delete().execute(db)
+        }
     }
 
     @Test("INSERT with NULL optional fields")
@@ -108,6 +126,11 @@ struct InsertExecutionTests {
         #expect(reminder.assignedUserID == nil)
         #expect(reminder.priority == nil)
         #expect(reminder.dueDate == nil)
+
+        // Cleanup
+        try await db.write { db in
+            try await Reminder.find(reminder.id).delete().execute(db)
+        }
     }
 
     @Test("INSERT with priority levels")
@@ -138,6 +161,12 @@ struct InsertExecutionTests {
         #expect(inserted[0].priority == .low)
         #expect(inserted[1].priority == .medium)
         #expect(inserted[2].priority == .high)
+
+        // Cleanup
+        let ids = inserted.map(\.id)
+        try await db.write { db in
+            try await Reminder.find(ids).delete().execute(db)
+        }
     }
 
     @Test("INSERT and verify with SELECT")
@@ -165,6 +194,11 @@ struct InsertExecutionTests {
         #expect(fetched != nil)
         #expect(fetched?.title == "Verify test")
         #expect(fetched?.notes == "Test notes")
+
+        // Cleanup
+        try await db.write { db in
+            try await Reminder.find(insertedId).delete().execute(db)
+        }
     }
 
     @Test("INSERT with boolean flags")
@@ -193,6 +227,12 @@ struct InsertExecutionTests {
         #expect(inserted[0].isFlagged == true)
         #expect(inserted[1].isCompleted == false)
         #expect(inserted[1].isFlagged == false)
+
+        // Cleanup
+        let ids = inserted.map(\.id)
+        try await db.write { db in
+            try await Reminder.find(ids).delete().execute(db)
+        }
     }
 
     @Test("INSERT into different lists")
@@ -209,6 +249,12 @@ struct InsertExecutionTests {
         #expect(inserted.count == 2)
         #expect(inserted[0].remindersListID == 1)
         #expect(inserted[1].remindersListID == 2)
+
+        // Cleanup
+        let ids = inserted.map(\.id)
+        try await db.write { db in
+            try await Reminder.find(ids).delete().execute(db)
+        }
     }
 
     @Test("INSERT with date fields")
@@ -229,20 +275,32 @@ struct InsertExecutionTests {
         #expect(inserted.count == 1)
         let reminder = try #require(inserted.first)
         #expect(reminder.dueDate != nil)
-        // Allow 1 second tolerance for date comparison
+
+        // PostgreSQL DATE type only stores date (not time), so compare calendar dates
         if let dueDate = reminder.dueDate {
-            #expect(abs(dueDate.timeIntervalSince(futureDate)) < 1.0)
+            let calendar = Calendar.current
+            let insertedComponents = calendar.dateComponents([.year, .month, .day], from: futureDate)
+            let retrievedComponents = calendar.dateComponents([.year, .month, .day], from: dueDate)
+            #expect(insertedComponents == retrievedComponents)
+        }
+
+        // Cleanup
+        try await db.write { db in
+            try await Reminder.find(reminder.id).delete().execute(db)
         }
     }
 
     @Test("INSERT without RETURNING")
     func insertWithoutReturning() async throws {
+        // Use unique title for cleanup
+        let uniqueTitle = "No return test \(UUID())"
+
         // Insert without RETURNING - just verify it doesn't throw
         try await db.write { db in
             try await Reminder.insert {
                 Reminder.Draft(
                     remindersListID: 1,
-                    title: "No return"
+                    title: uniqueTitle
                 )
             }
             .execute(db)
@@ -250,9 +308,14 @@ struct InsertExecutionTests {
 
         // Verify it was inserted by counting
         let count = try await db.read { db in
-            try await Reminder.where { $0.title == "No return" }.fetchAll(db)
+            try await Reminder.where { $0.title == uniqueTitle }.fetchAll(db)
         }
 
         #expect(count.count >= 1)
+
+        // Cleanup
+        try await db.write { db in
+            try await Reminder.where { $0.title == uniqueTitle }.delete().execute(db)
+        }
     }
 }
