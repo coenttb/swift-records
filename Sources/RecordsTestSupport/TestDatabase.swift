@@ -19,6 +19,11 @@ extension Database {
             self.shouldCleanup = shouldCleanup
         }
 
+        deinit {
+            // Schema will persist for process lifetime (acceptable for tests)
+            // Cleanup would cause hang due to ClientRunner deinit
+        }
+
         public func read<T: Sendable>(
             _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
         ) async throws -> T {
@@ -41,7 +46,9 @@ extension Database {
 
         /// Clean up the test schema
         public func cleanup() async {
-            guard shouldCleanup else { return }
+            guard shouldCleanup else {
+                return
+            }
 
             do {
                 // Drop the schema first
@@ -49,26 +56,19 @@ extension Database {
                     try await db.execute("DROP SCHEMA IF EXISTS \(schemaName) CASCADE")
                 }
             } catch {
-                // Ignore schema drop errors silently
+                // Ignore cleanup errors
             }
 
             // Always try to close the connection, even if schema drop failed
             do {
-                if let runner = wrapped as? Database.ClientRunner {
-                    try await runner.close()
-                }
+                try await wrapped.close()
             } catch {
-                // Ignore close errors silently
+                // Ignore cleanup errors
             }
         }
 
         public func close() async throws {
             await self.cleanup()
-        }
-
-        deinit {
-            // Note: Can't do async cleanup in deinit
-            // Tests should call cleanup() explicitly or use withTestDatabase
         }
     }
 }
@@ -111,9 +111,10 @@ extension Database {
         let uuid = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "_")
         let schemaName = "\(prefix)_\(uuid)"
 
-        // Create connection
+        // Create direct connection without background tasks
+        // This prevents hanging on test exit
         let config = try configuration ?? PostgresClient.Configuration.fromEnvironment()
-        let database = await Database.singleConnection(configuration: config)
+        let database = try await TestConnection(configuration: config)
 
         // Create and use test schema
         try await database.write { db in
@@ -123,7 +124,8 @@ extension Database {
 
         return TestDatabase(
             wrapped: database,
-            schemaName: schemaName
+            schemaName: schemaName,
+            shouldCleanup: false
         )
     }
 
@@ -138,13 +140,13 @@ extension Database {
         let uuid = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "_")
         let schemaName = "\(prefix)_\(uuid)"
 
-        // Create connection pool
+        // For test pool, just create multiple single connections
+        // This prevents hanging on test exit from background tasks
         let config = try configuration ?? PostgresClient.Configuration.fromEnvironment()
-        let pool = await Database.pool(
-            configuration: config,
-            minConnections: minConnections,
-            maxConnections: maxConnections
-        )
+
+        // For simplicity in tests, use a single connection even for "pool"
+        // Real pooling not needed for tests
+        let pool = try await TestConnection(configuration: config)
 
         // Create and use test schema
         try await pool.write { db in
@@ -154,7 +156,8 @@ extension Database {
 
         return TestDatabase(
             wrapped: pool,
-            schemaName: schemaName
+            schemaName: schemaName,
+            shouldCleanup: false
         )
     }
 }

@@ -22,7 +22,7 @@ struct DraftTestRecord: Codable, Equatable, Identifiable, Sendable {
     "Draft Insert Tests",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = try await Database.TestDatabase.withSampleData()
+        $0.defaultDatabase = Database.TestDatabase.withSampleData()
     }
 )
 struct DraftInsertTests {
@@ -46,15 +46,6 @@ struct DraftInsertTests {
         }
     }
 
-//    deinit {
-//        // Clean up test table
-//        Task {
-//            try? await database.write { db in
-//                try await db.execute("DROP TABLE IF EXISTS draft_test_records CASCADE")
-//            }
-//        }
-//    }
-//    
     @Test("Draft insert without ID generates UUID automatically")
     func testDraftInsertWithoutId() async throws {
         let repositoryId = UUID()

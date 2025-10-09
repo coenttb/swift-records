@@ -12,7 +12,7 @@ import Testing
   .snapshots(record: .never),
   .dependencies {
     $0.envVars = .development
-    $0.defaultDatabase = try await Database.TestDatabase.withReminderData()
+    $0.defaultDatabase = Database.TestDatabase.withReminderData()
   }
 )
 struct QuerySnapshotTests {

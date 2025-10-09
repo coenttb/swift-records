@@ -8,7 +8,7 @@ import Testing
     "Transaction Management",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = try await Database.TestDatabase.withSchema()
+        $0.defaultDatabase = Database.TestDatabase.withSchema()
     }
 )
 struct TransactionTests {

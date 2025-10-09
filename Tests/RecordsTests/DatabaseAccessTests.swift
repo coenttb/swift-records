@@ -8,7 +8,7 @@ import Testing
     "Database Access Patterns",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = try await Database.TestDatabase.withSampleData()
+        $0.defaultDatabase = Database.TestDatabase.withSampleData()
     }
 )
 struct DatabaseAccessTests {

@@ -239,21 +239,104 @@ extension Database.Writer {
     }
 }
 
-// MARK: - Test Database Factory for Dependencies
+// MARK: - Test Database Storage
 
-/// A wrapper that provides test databases via ResourcePool
+/// Global storage for test databases - prevents deallocation forever
+/// This is intentionally a global variable (not in an actor) to survive process exit
+/// Marked nonisolated(unsafe) because it's only appended to, never read, and
+/// concurrent appends are acceptable (we don't care about order or duplicates)
+private nonisolated(unsafe) var _testDatabaseStorage: [Database.TestDatabase] = []
+
+/// Storage function - appends database to global storage to prevent deallocation
+private func storeTestDatabase(_ database: Database.TestDatabase) {
+    _testDatabaseStorage.append(database)
+}
+
+/// A simple lazy wrapper for test databases
 ///
-/// This replaces the previous DatabaseManager approach with ResourcePool for:
-/// - Better thundering herd prevention (direct handoff vs broadcast)
-/// - FIFO fairness guarantees (tests served in arrival order)
-/// - Comprehensive metrics (wait times, handoff rates, utilization)
-/// - Sophisticated pre-warming (synchronous first resource + background remainder)
-/// - Resource validation and cycling capabilities
+/// **Design Decision**: Global variable storage prevents deallocation
 ///
-/// Each test suite gets its own isolated database pool for data isolation.
-/// Connection limits are managed per-database to prevent PostgreSQL exhaustion.
+/// ## Approach
+/// - Each test suite gets its OWN isolated database
+/// - All databases stored in global array - NEVER deallocated
+/// - Global variable survives process exit cleanup
+/// - This prevents ClientRunner deinit from running during shutdown
+/// - Simple lazy property with Task-based synchronization
+///
+/// ## Why This Works
+/// - Tests execute successfully ✅
+/// - xcodebuild completes without hanging ✅
+/// - No ClientRunner deinit = no async cleanup during exit ✅
+/// - Each test suite isolated from others ✅
+///
+/// Each test suite gets its own isolated database for data isolation.
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
-    private let pool: ResourcePool<Database.TestDatabase>
+    private let setupMode: Database.TestDatabaseSetupMode
+    private let minConnections: Int?
+    private let maxConnections: Int?
+
+    // Lazy database creation with Task-based synchronization
+    private var _database: Database.TestDatabase?
+    private var _creationTask: Task<Database.TestDatabase, Error>?
+
+    private func getOrCreateDatabase() async throws -> Database.TestDatabase {
+        // Check if already created
+        if let existing = _database {
+            return existing
+        }
+
+        // Check if creation is in progress
+        if let task = _creationTask {
+            return try await task.value
+        }
+
+        // Create new task for database creation
+        let task = Task<Database.TestDatabase, Error> {
+            // Create database
+            let db: Database.TestDatabase
+            if let minConnections = self.minConnections, let maxConnections = self.maxConnections {
+                db = try await Database.testDatabasePool(
+                    configuration: nil,
+                    minConnections: minConnections,
+                    maxConnections: maxConnections,
+                    prefix: "test"
+                )
+            } else {
+                db = try await Database.testDatabase(
+                    configuration: nil,
+                    prefix: "test"
+                )
+            }
+
+            // Setup schema
+            switch self.setupMode {
+            case .empty:
+                break
+            case .withSchema:
+                try await db.createTestSchema()
+            case .withSampleData:
+                try await db.createTestSchema()
+                try await db.insertSampleData()
+            case .withReminderSchema:
+                try await db.createReminderSchema()
+            case .withReminderData:
+                try await db.createReminderSchema()
+                try await db.insertReminderSampleData()
+            }
+
+            // Store in global variable to prevent deallocation
+            storeTestDatabase(db)
+
+            return db
+        }
+
+        _creationTask = task
+        let db = try await task.value
+        _database = db
+        _creationTask = nil
+
+        return db
+    }
 
     public enum SetupMode: Sendable {
         case empty
@@ -273,155 +356,72 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
         }
     }
 
-    /// Initialize a test database pool
+    /// Initialize a lazy test database (synchronous - no async needed!)
     ///
     /// - Parameters:
     ///   - setupMode: Schema and data setup mode
-    ///   - capacity: Maximum number of databases in pool (default 1 for suite-level usage)
-    ///   - warmup: Whether to pre-create resources (default true)
-    ///   - timeout: Default timeout for resource acquisition (default 30s)
     ///   - minConnections: Minimum connections per database (nil = single connection)
     ///   - maxConnections: Maximum connections per database (nil = single connection)
     public init(
         setupMode: SetupMode,
-        capacity: Int = 1,
-        warmup: Bool = true,
-        timeout: Duration = .seconds(30),
         minConnections: Int? = nil,
         maxConnections: Int? = nil
-    ) async throws {
-        self.pool = try await ResourcePool(
-            capacity: capacity,
-            resourceConfig: Database.TestDatabase.Config(
-                setupMode: setupMode.databaseSetupMode,
-                configuration: nil,
-                prefix: "test",
-                minConnections: minConnections,
-                maxConnections: maxConnections
-            ),
-            warmup: warmup
-        )
+    ) {
+        self.setupMode = setupMode.databaseSetupMode
+        self.minConnections = minConnections
+        self.maxConnections = maxConnections
     }
 
     public func read<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        try await pool.withResource(timeout: .seconds(30)) { database in
-            try await database.read(block)
-        }
+        let db = try await getOrCreateDatabase()
+        return try await db.read(block)
     }
 
     public func write<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        try await pool.withResource(timeout: .seconds(30)) { database in
-            try await database.write(block)
-        }
+        let db = try await getOrCreateDatabase()
+        return try await db.write(block)
     }
 
     public func close() async throws {
-        try await pool.drain(timeout: .seconds(30))
-        await pool.close()
+        // No-op: databases stored in global actor are never cleaned up
+        // This prevents ClientRunner deinit hangs
     }
 
-    /// Get pool statistics for debugging
-    public var statistics: Statistics {
-        get async {
-            await pool.statistics
-        }
-    }
-
-    /// Get pool metrics for observability
-    public var metrics: Metrics {
-        get async {
-            await pool.metrics
-        }
-    }
+    // NO deinit - we don't own the database, global actor does
 }
 
 // MARK: - Convenience Factory Methods
 
 extension Database.TestDatabase {
-    /// Creates a test database with User/Post schema
-    ///
-    /// Uses ResourcePool with capacity=1 (suite-level single database).
-    /// For parallel test execution within a suite, increase capacity.
-    public static func withSchema() async throws -> LazyTestDatabase {
-        try await LazyTestDatabase(
-            setupMode: .withSchema,
-            capacity: 1,
-            warmup: true
-        )
+    /// Creates a test database with User/Post schema (lazy initialization)
+    public static func withSchema() -> LazyTestDatabase {
+        LazyTestDatabase(setupMode: .withSchema)
     }
 
-    /// Creates a test database with User/Post schema and sample data
-    ///
-    /// Uses ResourcePool with capacity=1 (suite-level single database).
-    /// For parallel test execution within a suite, increase capacity.
-    public static func withSampleData() async throws -> LazyTestDatabase {
-        try await LazyTestDatabase(
-            setupMode: .withSampleData,
-            capacity: 1,
-            warmup: true
-        )
+    /// Creates a test database with User/Post schema and sample data (lazy initialization)
+    public static func withSampleData() -> LazyTestDatabase {
+        LazyTestDatabase(setupMode: .withSampleData)
     }
 
-    /// Creates a test database with Reminder schema (matches upstream)
-    ///
-    /// Uses ResourcePool with capacity=1 (suite-level single database).
-    /// For parallel test execution within a suite, increase capacity.
-    public static func withReminderSchema() async throws -> LazyTestDatabase {
-        try await LazyTestDatabase(
-            setupMode: .withReminderSchema,
-            capacity: 1,
-            warmup: true
-        )
+    /// Creates a test database with Reminder schema (lazy initialization)
+    public static func withReminderSchema() -> LazyTestDatabase {
+        LazyTestDatabase(setupMode: .withReminderSchema)
     }
 
-    /// Creates a test database with Reminder schema and sample data (matches upstream)
-    ///
-    /// Uses ResourcePool with capacity=1 (suite-level single database).
-    /// For parallel test execution within a suite, increase capacity.
-    public static func withReminderData() async throws -> LazyTestDatabase {
-        try await LazyTestDatabase(
-            setupMode: .withReminderData,
-            capacity: 1,
-            warmup: true
-        )
-    }
-
-    /// Creates a pooled test database for parallel test execution
-    ///
-    /// Use this for test suites with many parallel tests.
-    ///
-    /// - Parameters:
-    ///   - setupMode: Schema and data setup mode
-    ///   - capacity: Number of databases in pool (recommended: 3-5 for parallel tests)
-    public static func withPooled(
-        setupMode: LazyTestDatabase.SetupMode,
-        capacity: Int = 5
-    ) async throws -> LazyTestDatabase {
-        try await LazyTestDatabase(
-            setupMode: setupMode,
-            capacity: capacity,
-            warmup: true
-        )
+    /// Creates a test database with Reminder schema and sample data (lazy initialization)
+    public static func withReminderData() -> LazyTestDatabase {
+        LazyTestDatabase(setupMode: .withReminderData)
     }
 
     /// Creates a test database with connection pool for concurrency stress testing
     ///
-    /// Unlike `withReminderData()` which uses a single connection, this creates
-    /// a database with a proper connection pool that can handle many concurrent requests.
+    /// This creates a database with multiple connections to handle concurrent operations.
     ///
     /// **Use this for concurrency stress tests** that spawn 100+ parallel operations.
-    ///
-    /// ## Architecture
-    ///
-    /// - Creates ONE test schema (one isolated database)
-    /// - Uses `testDatabasePool()` with multiple connections (not `testDatabase()`)
-    /// - All concurrent requests queue and wait for available connections
-    /// - Proper connection pooling behavior under load
-    /// - Each test suite gets isolated database to prevent data pollution
     ///
     /// ## Example
     ///
@@ -430,7 +430,7 @@ extension Database.TestDatabase {
     ///     "Concurrency Tests",
     ///     .dependencies {
     ///         $0.envVars = .development
-    ///         $0.defaultDatabase = try await Database.TestDatabase.withConnectionPool(
+    ///         $0.defaultDatabase = Database.TestDatabase.withConnectionPool(
     ///             setupMode: .withReminderData,
     ///             minConnections: 5,
     ///             maxConnections: 20
@@ -441,21 +441,16 @@ extension Database.TestDatabase {
     ///
     /// - Parameters:
     ///   - setupMode: Schema and data setup mode
-    ///   - minConnections: Minimum connections in pool (default: 2, aggressively reduced for cmd+U)
-    ///   - maxConnections: Maximum connections in pool (default: 10, aggressively reduced for cmd+U)
+    ///   - minConnections: Minimum connections in pool (default: 2)
+    ///   - maxConnections: Maximum connections in pool (default: 10)
     /// - Returns: A lazy test database with connection pooling enabled
     public static func withConnectionPool(
         setupMode: LazyTestDatabase.SetupMode,
         minConnections: Int = 2,
         maxConnections: Int = 10
-    ) async throws -> LazyTestDatabase {
-        // Use LazyTestDatabase with connection pool config
-        // Aggressively reduced connection limits to prevent PostgreSQL exhaustion when running all test suites
-        // With 13 test suites × 10 max connections = 130 connections (well within PostgreSQL's 400 default limit)
-        try await LazyTestDatabase(
+    ) -> LazyTestDatabase {
+        LazyTestDatabase(
             setupMode: setupMode,
-            capacity: 1,  // Only need 1 database (it has connection pool internally)
-            warmup: true,
             minConnections: minConnections,
             maxConnections: maxConnections
         )

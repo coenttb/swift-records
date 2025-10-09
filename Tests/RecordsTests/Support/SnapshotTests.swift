@@ -15,11 +15,11 @@ import Testing
 /// - SnapshotTests+Delete.swift - DELETE patterns
 @Suite(
   "Snapshot Tests",
-  .disabled(),
+//  .disabled(),
   .snapshots(record: .never),
   .dependencies {
     $0.envVars = .development
-    $0.defaultDatabase = try await Database.TestDatabase.withReminderData()
+    $0.defaultDatabase = Database.TestDatabase.withReminderData()
   }
 )
 struct SnapshotTests {}

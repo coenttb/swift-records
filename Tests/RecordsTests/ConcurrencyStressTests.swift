@@ -12,7 +12,7 @@ import Testing
         $0.envVars = .development
         // Use connection pool for proper concurrency testing
         // Reduced to 2/10 (matches new defaults) to prevent connection exhaustion
-        $0.defaultDatabase = try await Database.TestDatabase.withConnectionPool(
+        $0.defaultDatabase = Database.TestDatabase.withConnectionPool(
             setupMode: .withReminderData,
             minConnections: 2,
             maxConnections: 10
