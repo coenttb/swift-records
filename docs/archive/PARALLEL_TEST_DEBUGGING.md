@@ -1,7 +1,7 @@
 # Parallel Test Execution Debugging
 
 **Date**: 2025-10-08
-**Status**: 🔴 Issue persists - Tests pass individually but hang with cmd+U
+**Status**: ✅ SOLVED - Tests now pass with cmd+U using direct database creation
 
 ## The Problem
 
@@ -214,6 +214,112 @@ func insertBasicDraft() async throws {
 
 ---
 
+### ✅ Approach 4: Direct Database Creation (SOLUTION)
+
+**Implementation**:
+```swift
+/// Actor to manage database creation bypassing the pool to avoid actor bottleneck
+private actor DatabaseManager {
+    private var database: Database.TestDatabase?
+    private let setupMode: Database.TestDatabaseSetupMode
+
+    func getDatabase() async throws -> Database.TestDatabase {
+        if let database = database {
+            return database
+        }
+
+        // Create database directly without going through the pool actor
+        // This allows parallel test suites to create their databases concurrently
+        let newDatabase = try await Database.testDatabase(
+            configuration: nil,
+            prefix: "test"
+        )
+
+        // Setup schema based on mode
+        switch setupMode {
+        case .withReminderData:
+            try await newDatabase.createReminderSchema()
+            try await newDatabase.insertReminderSampleData()
+        // ... other modes
+        }
+
+        self.database = newDatabase
+        return newDatabase
+    }
+}
+
+public final class LazyTestDatabase: Database.Writer {
+    private let manager: DatabaseManager
+
+    init(setupMode: SetupMode, preWarm: Bool = true) {
+        self.manager = DatabaseManager(setupMode: setupMode.databaseSetupMode)
+
+        // Pre-warm the database by starting acquisition immediately in background
+        // This prevents the "thundering herd" problem
+        if preWarm {
+            Task.detached { [manager] in
+                _ = try? await manager.getDatabase()
+            }
+        }
+    }
+
+    public func read<T>(_ block: @Sendable (any Database.Connection) async throws -> T) async throws -> T {
+        let database = try await manager.getDatabase()
+        return try await database.read(block)
+    }
+
+    public func write<T>(_ block: @Sendable (any Database.Connection) async throws -> T) async throws -> T {
+        let database = try await manager.getDatabase()
+        return try await database.write(block)
+    }
+}
+```
+
+**Usage in tests**:
+```swift
+@Suite(
+    "SELECT Execution Tests",
+    .dependency(\.envVars, .development),
+    .dependency(\.defaultDatabase, Database.TestDatabase.withReminderData())
+)
+struct SelectExecutionTests {
+    @Dependency(\.defaultDatabase) var db
+
+    @Test("SELECT all records")
+    func selectAll() async throws {
+        let reminders = try await db.read { db in
+            try await Reminder.all.fetchAll(db)
+        }
+        #expect(reminders.count == 6)
+    }
+}
+```
+
+**Why it works**:
+1. **Bypasses actor bottleneck**: Each suite's `DatabaseManager` creates its own database directly via `Database.testDatabase()`, not through a shared pool actor
+2. **Parallel initialization**: Multiple test suites can create their databases concurrently without queuing
+3. **Pre-warming optimization**: `Task.detached` starts database creation in background immediately when suite is initialized, before first test runs
+4. **Isolated schemas**: Each database gets its own PostgreSQL schema, preventing data conflicts between parallel tests
+5. **Lazy evaluation**: Database is only created once per suite, cached in the `DatabaseManager` actor
+6. **Clean lifecycle**: `deinit` ensures database cleanup happens automatically
+
+**Root cause of previous hangs**:
+- **Approach 1** (per-test databases): Created 44 actors × 5 connections = 220 connections → exhausted PostgreSQL limit
+- **Approach 2** (transaction rollback): All tests queued behind single `Database.Writer` actor → serialization bottleneck
+- **Approach 3** (suite-level database): Tests worked individually but TestDatabasePool actor became bottleneck during parallel suite initialization
+
+**The fix**:
+- Each suite gets its own `DatabaseManager` actor that creates databases **directly**
+- No shared coordination point during initialization = no bottleneck
+- Pre-warming prevents thundering herd when first test in suite runs
+- Tests pass reliably with cmd+U (Xcode's parallel execution)
+
+**Location**: `Sources/RecordsTestSupport/TestDatabaseHelper.swift:241-289`
+
+**Verdict**: ✅ **SOLVED** - Tests now pass with cmd+U parallel execution
+
+---
+
 ## PostgreSQL vs SQLite Differences
 
 ### SQLite (Upstream)
@@ -364,15 +470,21 @@ swift test --filter "SelectExecutionTests|InsertExecutionTests" --parallel
 
 ## Summary
 
-We've successfully:
-- ✅ Analyzed upstream patterns (sqlite-data, swift-structured-queries)
-- ✅ Removed transaction rollback wrappers (actor bottleneck)
-- ✅ Implemented manual cleanup pattern
-- ✅ Made tests pass individually
+✅ **PROBLEM SOLVED** - Tests now pass with cmd+U parallel execution!
 
-We're stuck on:
-- ❌ **Parallel execution (cmd+U) still hangs**
-- ❓ Root cause unclear despite following upstream patterns
-- ❓ Tests should work with PostgreSQL MVCC but don't
+### Journey to Solution:
+1. ✅ Analyzed upstream patterns (sqlite-data, swift-structured-queries)
+2. ✅ Removed transaction rollback wrappers (actor bottleneck)
+3. ✅ Implemented manual cleanup pattern
+4. ✅ Identified TestDatabasePool actor as bottleneck during parallel initialization
+5. ✅ **Implemented direct database creation to bypass pool actor**
 
-**The core mystery**: Tests follow upstream patterns, have actor isolation, pass individually, yet hang in parallel. Something about our PostgreSQL setup or test database initialization is not concurrency-safe, but it's not obvious what.
+### Final Solution (Approach 4):
+- Each test suite gets its own `DatabaseManager` actor
+- Database creation happens **directly** via `Database.testDatabase()`, not through shared pool
+- Pre-warming with `Task.detached` prevents thundering herd problem
+- Tests execute in parallel without actor serialization bottleneck
+- **Result**: All 44 tests across 4 suites pass reliably with cmd+U
+
+### Key Insight:
+The issue was never with PostgreSQL concurrency or MVCC. The bottleneck was the **TestDatabasePool actor** coordinating database creation during parallel suite initialization. By having each suite create its database directly, we eliminated the shared coordination point and enabled true parallel execution.
