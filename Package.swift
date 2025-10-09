@@ -34,6 +34,7 @@ let package = Package(
             name: "Records",
             dependencies: [
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
+//                .product(name: "StructuredQueriesPostgresSupport", package: "swift-structured-queries-postgres"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "EnvironmentVariables", package: "swift-environment-variables"),
@@ -45,6 +46,7 @@ let package = Package(
             dependencies: [
                 "Records",
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
+//                .product(name: "StructuredQueriesPostgresSupport", package: "swift-structured-queries-postgres"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
                 .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),

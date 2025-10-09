@@ -85,7 +85,7 @@ public func assertQuery<each V: QueryRepresentable, S: Statement<(repeat each V)
   do {
     let rows = try await execute(query)
     var table = ""
-    StructuredQueriesPostgresTestSupport.printTable(rows, to: &table)
+    printTable(rows, to: &table)
 
     // Results snapshot (synchronous - formatting is sync)
     if !table.isEmpty {
@@ -205,4 +205,73 @@ public func assertQuery<S: SelectStatement, each J: Table>(
     line: line,
     column: column
   )
+}
+
+
+public func printTable<each C>(_ rows: [(repeat each C)], to output: inout some TextOutputStream) {
+    var maxColumnSpan: [Int] = []
+    var hasMultiLineRows = false
+    for _ in repeat (each C).self {
+        maxColumnSpan.append(0)
+    }
+    var table: [([[Substring]], maxRowSpan: Int)] = []
+    for row in rows {
+        var columns: [[Substring]] = []
+        var index = 0
+        var maxRowSpan = 0
+        for column in repeat each row {
+            defer { index += 1 }
+            var cell = ""
+            customDump(column, to: &cell)
+            let lines = cell.split(separator: "\n")
+            hasMultiLineRows = hasMultiLineRows || lines.count > 1
+            maxRowSpan = max(maxRowSpan, lines.count)
+            maxColumnSpan[index] = max(maxColumnSpan[index], lines.map(\.count).max() ?? 0)
+            columns.append(lines)
+        }
+        table.append((columns, maxRowSpan))
+    }
+    guard !table.isEmpty else { return }
+    output.write("┌─")
+    output.write(
+        maxColumnSpan
+            .map { String(repeating: "─", count: $0) }
+            .joined(separator: "─┬─")
+    )
+    output.write("─┐\n")
+    for (offset, rowAndMaxRowSpan) in table.enumerated() {
+        let (row, maxRowSpan) = rowAndMaxRowSpan
+        for rowOffset in 0..<maxRowSpan {
+            output.write("│ ")
+            var line: [String] = []
+            for (columns, maxColumnSpan) in zip(row, maxColumnSpan) {
+                if columns.count <= rowOffset {
+                    line.append(String(repeating: " ", count: maxColumnSpan))
+                } else {
+                    line.append(
+                        columns[rowOffset]
+                        + String(repeating: " ", count: maxColumnSpan - columns[rowOffset].count)
+                    )
+                }
+            }
+            output.write(line.joined(separator: " │ "))
+            output.write(" │\n")
+        }
+        if hasMultiLineRows, offset != table.count - 1 {
+            output.write("├─")
+            output.write(
+                maxColumnSpan
+                    .map { String(repeating: "─", count: $0) }
+                    .joined(separator: "─┼─")
+            )
+            output.write("─┤\n")
+        }
+    }
+    output.write("└─")
+    output.write(
+        maxColumnSpan
+            .map { String(repeating: "─", count: $0) }
+            .joined(separator: "─┴─")
+    )
+    output.write("─┘")
 }
