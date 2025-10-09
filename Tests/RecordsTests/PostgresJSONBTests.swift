@@ -9,7 +9,7 @@ import Testing
     "PostgresJSONB Tests",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = Database.TestDatabase.withSampleData()
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
 struct PostgresJSONBTests {

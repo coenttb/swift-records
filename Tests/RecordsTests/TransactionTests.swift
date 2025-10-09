@@ -8,7 +8,7 @@ import Testing
     "Transaction Management",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = Database.TestDatabase.withSchema()
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
 struct TransactionTests {
@@ -18,41 +18,49 @@ struct TransactionTests {
     func testWithTransaction() async throws {
         // Execute transaction
         try await database.withTransaction { db in
-            try await User.insert {
-                User.Draft(name: "Transaction User", email: "tx@example.com", createdAt: Date())
+            try await RemindersList.insert {
+                RemindersList.Draft(color: 0xFF0000, title: "Transaction List", position: 2)
             }.execute(db)
 
-            try await Post.insert {
-                Post.Draft(userId: 1, title: "Transaction Post", content: "Content", publishedAt: Date())
+            try await Reminder.insert {
+                Reminder.Draft(
+                    notes: "Test transaction",
+                    remindersListID: 3, // New list we just created
+                    title: "Transaction Reminder"
+                )
             }.execute(db)
         }
 
-        // Verify data was committed
-        let userCount = try await database.read { db in
-            try await User.fetchCount(db)
+        // Verify data was committed (2 from sample + 1 new = 3)
+        let listCount = try await database.read { db in
+            try await RemindersList.fetchCount(db)
         }
 
-        let postCount = try await database.read { db in
-            try await Post.fetchCount(db)
+        let reminderCount = try await database.read { db in
+            try await Reminder.fetchCount(db)
         }
 
-        #expect(userCount == 1)
-        #expect(postCount == 1)
+        #expect(listCount == 3)
+        #expect(reminderCount == 7) // 6 from sample + 1 new
     }
 
     @Test("Transaction rolls back on error")
     func testTransactionRollback() async throws {
-        // Count initial state
-        let initialUserCount = try await database.read { db in
-            try await User.fetchCount(db)
+        // Count initial state (6 reminders from sample data)
+        let initialReminderCount = try await database.read { db in
+            try await Reminder.fetchCount(db)
         }
 
         // Attempt transaction that will fail
         do {
             try await database.withTransaction { db in
                 // This should succeed
-                try await User.insert {
-                    User.Draft(name: "Will Rollback", email: "rollback@example.com", createdAt: Date())
+                try await Reminder.insert {
+                    Reminder.Draft(
+                        notes: "Should not persist",
+                        remindersListID: 1,
+                        title: "Will Rollback"
+                    )
                 }.execute(db)
 
                 // Force an error
@@ -65,12 +73,12 @@ struct TransactionTests {
             // Expected error
         }
 
-        // Verify rollback
-        let finalUserCount = try await database.read { db in
-            try await User.fetchCount(db)
+        // Verify rollback (should still be 6)
+        let finalReminderCount = try await database.read { db in
+            try await Reminder.fetchCount(db)
         }
 
-        #expect(finalUserCount == initialUserCount)
+        #expect(finalReminderCount == initialReminderCount)
     }
 
     @Test("Transaction isolation levels")
@@ -84,45 +92,49 @@ struct TransactionTests {
 
         for level in isolationLevels {
             try await database.withTransaction(isolation: level) { db in
-                try await User.insert {
-                    User.Draft(
-                        name: "Isolation \(level)",
-                        email: "iso-\(level)@example.com",
-                        createdAt: Date()
+                try await Reminder.insert {
+                    Reminder.Draft(
+                        notes: "Testing isolation level \(level)",
+                        remindersListID: 1,
+                        title: "Isolation \(level)"
                     )
                 }.execute(db)
             }
         }
 
-        // Verify all were inserted
-        let users = try await database.read { db in
-            try await User.fetchAll(db)
+        // Verify all were inserted (6 from sample + 3 new = 9)
+        let reminders = try await database.read { db in
+            try await Reminder.fetchAll(db)
         }
 
-        #expect(users.count >= 3)
+        #expect(reminders.count == 9)
     }
 
     @Test("withRollback always rolls back")
     func testWithRollback() async throws {
-        // Count initial state
+        // Count initial state (6 from sample data)
         let initialCount = try await database.read { db in
-            try await User.fetchCount(db)
+            try await Reminder.fetchCount(db)
         }
 
         // Execute with rollback
         try await database.withRollback { db in
-            try await User.insert {
-                User.Draft(name: "Will Rollback", email: "rollback2@example.com", createdAt: Date())
+            try await Reminder.insert {
+                Reminder.Draft(
+                    notes: "Should not persist",
+                    remindersListID: 1,
+                    title: "Will Rollback"
+                )
             }.execute(db)
 
             // Verify insert worked within transaction
-            let count = try await User.fetchCount(db)
+            let count = try await Reminder.fetchCount(db)
             #expect(count == initialCount + 1)
         }
 
-        // Verify rollback occurred
+        // Verify rollback occurred (should still be 6)
         let finalCount = try await database.read { db in
-            try await User.fetchCount(db)
+            try await Reminder.fetchCount(db)
         }
 
         #expect(finalCount == initialCount)
@@ -134,16 +146,24 @@ struct TransactionTests {
     )
     func testWithSavepoint() async throws {
         try await database.withTransaction { db in
-            // Insert first user
-            try await User.insert {
-                User.Draft(name: "Before Savepoint", email: "before@example.com", createdAt: Date())
+            // Insert first reminder
+            try await Reminder.insert {
+                Reminder.Draft(
+                    notes: "",
+                    remindersListID: 1,
+                    title: "Before Savepoint"
+                )
             }.execute(db)
 
             // Try savepoint that will rollback
             do {
                 try await database.withSavepoint("test_savepoint") { spDb in
-                    try await User.insert {
-                        User.Draft(name: "In Savepoint", email: "savepoint@example.com", createdAt: Date())
+                    try await Reminder.insert {
+                        Reminder.Draft(
+                            notes: "",
+                            remindersListID: 1,
+                            title: "In Savepoint"
+                        )
                     }.execute(spDb)
 
                     // Force rollback of savepoint
@@ -155,20 +175,24 @@ struct TransactionTests {
             }
 
             // Insert after savepoint
-            try await User.insert {
-                User.Draft(name: "After Savepoint", email: "after@example.com", createdAt: Date())
+            try await Reminder.insert {
+                Reminder.Draft(
+                    notes: "",
+                    remindersListID: 1,
+                    title: "After Savepoint"
+                )
             }.execute(db)
         }
 
-        // Verify only users outside savepoint were committed
-        let users = try await database.read { db in
-            try await User.fetchAll(db)
+        // Verify only reminders outside savepoint were committed
+        let reminders = try await database.read { db in
+            try await Reminder.fetchAll(db)
         }
 
-        let names = users.map(\.name)
-        #expect(names.contains("Before Savepoint"))
-        #expect(names.contains("After Savepoint"))
-        #expect(!names.contains("In Savepoint"))
+        let titles = reminders.map(\.title)
+        #expect(titles.contains("Before Savepoint"))
+        #expect(titles.contains("After Savepoint"))
+        #expect(!titles.contains("In Savepoint"))
     }
 
     @Test(
@@ -178,25 +202,33 @@ struct TransactionTests {
     func testNestedTransactions() async throws {
         // Test nested transaction behavior
         try await database.withTransaction { db1 in
-            try await User.insert {
-                User.Draft(name: "Outer Transaction", email: "outer@example.com", createdAt: Date())
+            try await Reminder.insert {
+                Reminder.Draft(
+                    notes: "",
+                    remindersListID: 1,
+                    title: "Outer Transaction"
+                )
             }.execute(db1)
 
             // Nested transaction (actually a savepoint in PostgreSQL)
             try await database.withTransaction { db2 in
-                try await User.insert {
-                    User.Draft(name: "Inner Transaction", email: "inner@example.com", createdAt: Date())
+                try await Reminder.insert {
+                    Reminder.Draft(
+                        notes: "",
+                        remindersListID: 1,
+                        title: "Inner Transaction"
+                    )
                 }.execute(db2)
             }
         }
 
         // Both should be committed
-        let users = try await database.read { db in
-            try await User.fetchAll(db)
+        let reminders = try await database.read { db in
+            try await Reminder.fetchAll(db)
         }
 
-        let names = users.map(\.name)
-        #expect(names.contains("Outer Transaction"))
-        #expect(names.contains("Inner Transaction"))
+        let titles = reminders.map(\.title)
+        #expect(titles.contains("Outer Transaction"))
+        #expect(titles.contains("Inner Transaction"))
     }
 }

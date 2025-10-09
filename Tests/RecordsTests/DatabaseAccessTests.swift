@@ -8,7 +8,7 @@ import Testing
     "Database Access Patterns",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = Database.TestDatabase.withSampleData()
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
 struct DatabaseAccessTests {
@@ -59,7 +59,7 @@ struct DatabaseAccessTests {
                     _ = try? await database.read { db in
                         // Simulate read operation
                         try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-                        return try? await User.fetchCount(db)
+                        return try? await Reminder.fetchCount(db)
                     }
                     return Date().timeIntervalSince(taskStart)
                 }
@@ -84,9 +84,9 @@ struct DatabaseAccessTests {
     @Test("Database.Pool serializes write operations")
     func testDatabasePoolSerializesWrites() async throws {
         do {
-            // Clear any existing data first
-            try await database.write { db in
-                try await db.execute("DELETE FROM users")
+            // Start with known sample data (6 reminders from withReminderData)
+            let initialCount = try await database.read { db in
+                try await Reminder.fetchCount(db)
             }
 
             // Track write order
@@ -113,11 +113,11 @@ struct DatabaseAccessTests {
                             await collector.recordWrite(i)
 
                             // Perform actual write
-                            try? await User.insert {
-                                User.Draft(
-                                    name: "User \(i)",
-                                    email: "user\(i)@example.com",
-                                    createdAt: Date()
+                            try? await Reminder.insert {
+                                Reminder.Draft(
+                                    notes: "Testing concurrent write \(i)",
+                                    remindersListID: 1,
+                                    title: "Write Test \(i)"
                                 )
                             }.execute(db)
 
@@ -133,11 +133,11 @@ struct DatabaseAccessTests {
             // All writes should complete
             #expect(writeOrder.count == 5)
 
-            // Verify all users were created
-            let userCount = try await database.read { db in
-                try await User.fetchCount(db)
+            // Verify all reminders were created (6 initial + 5 new = 11)
+            let finalCount = try await database.read { db in
+                try await Reminder.fetchCount(db)
             }
-            #expect(userCount == 5)
+            #expect(finalCount == initialCount + 5)
         } catch {
             print("Detailed error: \(String(reflecting: error))")
             throw error
@@ -149,7 +149,7 @@ struct DatabaseAccessTests {
         do {
             // Start with known state
             let initialCount = try await database.read { db in
-                try await User.fetchCount(db)
+                try await Reminder.fetchCount(db)
             }
 
             // Concurrent reads and writes
@@ -159,11 +159,11 @@ struct DatabaseAccessTests {
                     group.addTask {
                         do {
                             try await database.write { db in
-                                try await User.insert {
-                                    User.Draft(
-                                        name: "New User \(i)",
-                                        email: "new\(i)@example.com",
-                                        createdAt: Date()
+                                try await Reminder.insert {
+                                    Reminder.Draft(
+                                        notes: "Test isolation",
+                                        remindersListID: 1,
+                                        title: "Concurrent Write \(i)"
                                     )
                                 }.execute(db)
                             }
@@ -179,7 +179,7 @@ struct DatabaseAccessTests {
                     group.addTask {
                         do {
                             let count = try await database.read { db in
-                                try await User.fetchCount(db)
+                                try await Reminder.fetchCount(db)
                             }
                             return "read-\(i)-count-\(count)"
                         } catch {
@@ -197,7 +197,7 @@ struct DatabaseAccessTests {
 
             // Final count should reflect all writes
             let finalCount = try await database.read { db in
-                try await User.fetchCount(db)
+                try await Reminder.fetchCount(db)
             }
             #expect(finalCount == initialCount + 3)
         } catch {
@@ -228,7 +228,7 @@ struct DatabaseAccessTests {
 
                     // Also do a database operation
                     _ = try? await database.read { db in
-                        try await User.fetchCount(db)
+                        try await Reminder.fetchCount(db)
                     }
 
                     return count

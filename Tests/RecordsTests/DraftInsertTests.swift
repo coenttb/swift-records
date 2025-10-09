@@ -22,7 +22,7 @@ struct DraftTestRecord: Codable, Equatable, Identifiable, Sendable {
     "Draft Insert Tests",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = Database.TestDatabase.withSampleData()
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
 struct DraftInsertTests {

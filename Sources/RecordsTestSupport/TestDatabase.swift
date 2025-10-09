@@ -49,17 +49,49 @@ extension Database {
 
 extension Database {
     /// Setup mode for test databases
-    public enum TestDatabaseSetupMode: Sendable {
-        /// Empty database (no tables)
-        case empty
-        /// User/Post schema (swift-records-specific tests)
-        case withSchema
-        /// User/Post schema with sample data
-        case withSampleData
-        /// Reminder schema (matches upstream swift-structured-queries)
-        case withReminderSchema
-        /// Reminder schema with sample data
-        case withReminderData
+    ///
+    /// A flexible, extensible way to configure test database initialization.
+    /// Users can create custom setup modes by extending this struct with static properties.
+    ///
+    /// ## Built-in Mode
+    /// - `.withReminderData`: Reminder schema with sample data (default for all tests)
+    ///
+    /// ## Upstream Compatibility
+    /// This schema matches Point-Free's test patterns:
+    /// - pointfreeco/swift-structured-queries
+    /// - pointfreeco/sqlite-data
+    ///
+    /// ## Custom Modes
+    /// ```swift
+    /// extension Database.TestDatabaseSetupMode {
+    ///     static let withMyData = TestDatabaseSetupMode { db in
+    ///         try await db.createReminderSchema()
+    ///         try await db.write { conn in
+    ///             try await conn.execute("INSERT INTO ...")
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    public struct TestDatabaseSetupMode: Sendable {
+        let setup: @Sendable (any Database.Writer) async throws -> Void
+
+        /// Create a custom setup mode
+        ///
+        /// - Parameter setup: Async closure that configures the database
+        public init(setup: @escaping @Sendable (any Database.Writer) async throws -> Void) {
+            self.setup = setup
+        }
+
+        /// Reminder schema with sample data (upstream compatibility)
+        ///
+        /// Creates reminders schema matching swift-structured-queries upstream tests.
+        /// Inserts sample reminders, lists, users, and tags.
+        ///
+        /// This is the standard test schema for all swift-records tests.
+        public static let withReminderData = TestDatabaseSetupMode { db in
+            try await db.createReminderSchema()
+            try await db.insertReminderSampleData()
+        }
     }
 }
 

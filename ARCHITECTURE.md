@@ -111,19 +111,26 @@ let config = try PostgresClient.Configuration.from(
 
 ### Connection Pooling
 
-#### ResourcePool Integration
+#### PostgresNIO Connection Management
 
-Uses `swift-resource-pool` for professional-grade connection pooling:
+Uses PostgresNIO's built-in connection management:
 
-**Features**:
-- FIFO fairness with direct handoff (eliminates thundering herd)
-- Comprehensive metrics (wait times, handoff rates, utilization)
-- Sophisticated pre-warming (synchronous first + background remainder)
-- Resource validation and cycling capabilities
+**For Production** (Database.pool()):
+- Uses swift-resource-pool for connection pooling
+- FIFO fairness with direct handoff
+- Comprehensive metrics and observability
+- Resource validation and cycling
 - Graceful shutdown with timeout
+
+**For Testing** (Database.testDatabase()):
+- Single connection per test suite
+- Direct database creation pattern
+- Schema isolation via PostgreSQL schemas
+- No shared pool coordination (eliminates bottleneck)
 
 **Configuration**:
 ```swift
+// Production pool configuration
 ResourcePoolConfiguration(
     minimumResourceCount: 2,
     maximumResourceCount: 5,
@@ -133,40 +140,35 @@ ResourcePoolConfiguration(
 )
 ```
 
-#### PoolableResource Conformance
+#### Test Database Pattern: Direct Creation
+
+**Problem Solved**: Shared pool actor during test initialization created bottleneck for parallel execution.
+
+**Solution**: Each test suite creates its own database directly:
 
 ```swift
-extension Database.TestDatabase: PoolableResource {
-    func isStillValid() async -> Bool {
-        // Check connection is alive
-    }
+// Each suite has independent DatabaseManager
+private actor DatabaseManager {
+    private var database: Database.TestDatabase?
 
-    func shutdown() async {
-        // Clean up database resources
+    func getDatabase() async throws -> Database.TestDatabase {
+        if let database { return database }
+
+        // Direct creation - no shared coordination
+        let db = try await Database.testDatabase(...)
+        self.database = db
+        return db
     }
 }
 ```
 
-**Lifecycle**:
-1. **Creation**: Async factory method creates database
-2. **Validation**: `isStillValid()` checks health
-3. **Recycling**: Used resources returned to pool
-4. **Shutdown**: Cleanup when removed from pool
+**Benefits**:
+- ✅ True parallel initialization
+- ✅ No actor bottleneck
+- ✅ Pre-warming optimization
+- ✅ Schema isolation per suite
 
-#### Metrics and Observability
-
-**Available Metrics**:
-- Resource requests (total, direct hits, pool retrievals, creations)
-- Wait times (current, total, average)
-- Pool state (available, checked out, total)
-- Handoff statistics (direct handoffs, requests with waits)
-
-**Access**:
-```swift
-let stats = pool.statistics
-print("Available: \(stats.availableResourceCount)")
-print("In Use: \(stats.checkedOutResourceCount)")
-```
+**See**: [LazyTestDatabase](#lazytestdatabase) section for details
 
 ### Reader/Writer Pattern
 
@@ -591,67 +593,147 @@ public actor TestDatabase: Database.Writer {
 
 ### LazyTestDatabase
 
-ResourcePool-based test database wrapper:
+Test database wrapper with direct creation and pre-warming:
 
 ```swift
 public final class LazyTestDatabase: Database.Writer {
-    private let pool: ResourcePool<Database.TestDatabase>
+    private let manager: DatabaseManager
 
-    public init(
-        setupMode: SetupMode,
-        minimumResourceCount: Int = 2,
-        maximumResourceCount: Int = 5
-    ) async throws {
-        self.pool = try await ResourcePool(
-            minimumResourceCount: minimumResourceCount,
-            maximumResourceCount: maximumResourceCount
-        ) {
-            try await Database.testDatabase(setupMode: setupMode)
+    init(setupMode: SetupMode, preWarm: Bool = true) {
+        self.manager = DatabaseManager(setupMode: setupMode.databaseSetupMode)
+
+        // Pre-warm database in background to prevent thundering herd
+        if preWarm {
+            Task.detached { [manager] in
+                _ = try? await manager.getDatabase()
+            }
         }
+    }
+}
+
+private actor DatabaseManager {
+    private var database: Database.TestDatabase?
+    private let setupMode: Database.TestDatabaseSetupMode
+
+    func getDatabase() async throws -> Database.TestDatabase {
+        if let database = database {
+            return database
+        }
+
+        // Create database directly (bypasses pool actor bottleneck)
+        let newDatabase = try await Database.testDatabase(
+            configuration: nil,
+            prefix: "test"
+        )
+
+        // Setup schema
+        try await setupMode.setup(newDatabase)
+
+        self.database = newDatabase
+        return newDatabase
     }
 }
 ```
 
+**Design Pattern: Direct Database Creation**
+
+**Problem**: Using a shared pool actor for test database initialization created a bottleneck during parallel suite initialization. All test suites queued behind a single coordination point.
+
+**Solution**: Each test suite gets its own `DatabaseManager` actor that creates databases directly via `Database.testDatabase()`, eliminating the shared coordination point.
+
 **Benefits**:
-- ✅ Eliminates thundering herd during parallel suite initialization
-- ✅ Metrics and observability
-- ✅ Resource validation
-- ✅ Graceful shutdown
+- ✅ **True parallel initialization**: Multiple suites create databases concurrently
+- ✅ **No shared bottleneck**: Each suite has independent DatabaseManager
+- ✅ **Pre-warming optimization**: Background creation prevents thundering herd
+- ✅ **Lazy evaluation**: Database created once per suite, cached
+- ✅ **Schema isolation**: Each database uses isolated PostgreSQL schema
+
+**Why This Works**:
+1. Each suite's `DatabaseManager` actor is independent
+2. Database creation happens concurrently without queuing
+3. Pre-warming starts immediately when suite initializes
+4. First test in suite finds database already created
+
+**Location**: `Sources/RecordsTestSupport/TestDatabaseHelper.swift`
 
 ### Schema Setup Modes
 
+**Extensible Struct Pattern**:
+
 ```swift
-public enum TestDatabaseSetupMode {
-    case empty                     // No tables
-    case withSchema                // User/Post schema
-    case withSampleData            // User/Post + data
-    case withReminderSchema        // Reminder schema (upstream-aligned)
-    case withReminderData          // Reminder + data (most common)
+public struct TestDatabaseSetupMode: Sendable {
+    let setup: @Sendable (any Database.Writer) async throws -> Void
+
+    public init(setup: @escaping @Sendable (any Database.Writer) async throws -> Void) {
+        self.setup = setup
+    }
+
+    // Built-in mode: Reminder schema with sample data (upstream-aligned)
+    public static let withReminderData = TestDatabaseSetupMode { db in
+        try await db.createReminderSchema()
+        try await db.insertReminderSampleData()
+    }
 }
 ```
 
-**Factory Methods**:
+**Why Extensible Struct**:
+- ✅ **Flexible**: Users can define custom setup modes via public init
+- ✅ **Simple**: Only one built-in mode needed for all current tests
+- ✅ **Upstream aligned**: Matches sqlite-data patterns exactly
+- ✅ **Type-safe**: Closures provide flexibility with compile-time safety
+
+**Custom Setup Mode Example**:
 ```swift
-Database.TestDatabase.withSchema()        // User/Post only
-Database.TestDatabase.withSampleData()    // User/Post + data
-Database.TestDatabase.withReminderSchema() // Reminder only
-Database.TestDatabase.withReminderData()   // Reminder + data
+// Users can extend with their own modes
+extension Database.TestDatabaseSetupMode {
+    static let myCustomSetup = TestDatabaseSetupMode { db in
+        try await db.createReminderSchema()
+        // Custom initialization logic
+        try await db.execute("INSERT INTO ...")
+    }
+}
+```
+
+**Factory Method**:
+```swift
+Database.TestDatabase.withReminderData()  // Reminder schema + sample data
 ```
 
 **Usage**:
 ```swift
 @Suite(
     "My Tests",
-    .dependency(\.defaultDatabase, Database.TestDatabase.withReminderData())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
+    }
 )
 struct MyTests {
     @Dependency(\.defaultDatabase) var db
 
     @Test func myTest() async throws {
-        // Database has Reminder schema + sample data
+        // Database has Reminder schema + sample data (6 reminders, 2 lists, etc.)
     }
 }
 ```
+
+**Reminder Schema Details**:
+
+**Tables**:
+- `remindersLists` - Lists containing reminders (Home, Work)
+- `reminders` - Individual reminders with due dates, flags, priorities
+- `users` - Simple user model (Alice, Bob)
+- `tags` - Tags for categorization
+- `remindersTags` - Junction table for many-to-many
+
+**Sample Data** (withReminderData):
+- 2 RemindersList records (Home, Work)
+- 6 Reminder records (Groceries, Haircut, Vet appointment, etc.)
+- 2 User records (Alice, Bob)
+- 4 Tag records (car, kids, someday, optional)
+- Relationships via remindersTags
+
+**Location**: `Sources/RecordsTestSupport/TestDatabaseHelper.swift`
 
 ---
 
@@ -780,17 +862,20 @@ func fetchUsers() async throws -> [User] {
 **Usage in Tests**:
 ```swift
 @Suite(
-    "User Tests",
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSampleData())
+    "Reminder Tests",
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
+    }
 )
-struct UserTests {
+struct ReminderTests {
     @Dependency(\.defaultDatabase) var db
 
-    @Test func fetchAllUsers() async throws {
-        let users = try await db.read { db in
-            try await User.all.fetchAll(db)
+    @Test func fetchAllReminders() async throws {
+        let reminders = try await db.read { db in
+            try await Reminder.all.fetchAll(db)
         }
-        #expect(users.count == 2)
+        #expect(reminders.count == 6)  // Sample data has 6 reminders
     }
 }
 ```

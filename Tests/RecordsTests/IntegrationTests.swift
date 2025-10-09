@@ -7,7 +7,7 @@ import Testing
     "Integration Tests",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = Database.TestDatabase.withSchema()
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
 struct IntegrationTests {

@@ -8,7 +8,7 @@ import Testing
     "Statement Extensions New",
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = Database.TestDatabase.withSchema()
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
 struct StatementExtensionTestsNew {
@@ -19,17 +19,21 @@ struct StatementExtensionTestsNew {
         do {
             // Test execute with insert statement
             try await database.write { db in
-                try await User.insert {
-                    User.Draft(name: "Test User", email: "test@example.com", createdAt: Date())
+                try await Reminder.insert {
+                    Reminder.Draft(
+                        notes: "Test notes",
+                        remindersListID: 1,
+                        title: "Test Reminder"
+                    )
                 }.execute(db)
             }
 
-            // Verify insertion
+            // Verify insertion (6 from sample data + 1 new = 7)
             let count = try await database.read { db in
-                try await User.fetchCount(db)
+                try await Reminder.fetchCount(db)
             }
 
-            #expect(count == 1)
+            #expect(count == 7)
         } catch {
             print("Detailed error: \(String(reflecting: error))")
             throw error
@@ -38,145 +42,142 @@ struct StatementExtensionTestsNew {
 
     @Test("Statement.fetchAll(db) returns all results")
     func testStatementFetchAll() async throws {
-        // Insert sample data
-        try await database.insertSampleData()
+        // Sample data already loaded by withReminderData()
 
         // Test fetchAll using static method
-        let users = try await database.read { db in
-            try await User.fetchAll(db)
+        let reminders = try await database.read { db in
+            try await Reminder.fetchAll(db)
         }
 
-        #expect(users.count == 2)
-        #expect(users.contains { $0.name == "Alice" })
-        #expect(users.contains { $0.name == "Bob" })
+        #expect(reminders.count == 6)
+        #expect(reminders.contains { $0.title == "Groceries" })
+        #expect(reminders.contains { $0.title == "Finish report" })
     }
 
     @Test("Statement.fetchOne(db) returns single result")
     func testStatementFetchOne() async throws {
-        // Insert sample data
-        try await database.insertSampleData()
+        // Sample data already loaded by withReminderData()
 
         // Test fetchOne
-        let user = try await database.read { db in
-            try await User
-                .where { $0.email == "alice@example.com" }
+        let reminder = try await database.read { db in
+            try await Reminder
+                .where { $0.title == "Groceries" }
                 .asSelect()
                 .fetchOne(db)
         }
 
-        #expect(user != nil)
-        #expect(user?.name == "Alice")
+        #expect(reminder != nil)
+        #expect(reminder?.notes == "Milk, Eggs, Apples")
     }
 
     @Test("SelectStatement.fetchCount(db) returns count")
     func testSelectStatementFetchCount() async throws {
-        // Insert sample data
-        try await database.insertSampleData()
+        // Sample data already loaded by withReminderData()
 
         // Test fetchCount using static method
         let totalCount = try await database.read { db in
-            try await User.fetchCount(db)
+            try await Reminder.fetchCount(db)
         }
 
-        #expect(totalCount == 2)
+        #expect(totalCount == 6)
 
         // Test fetchCount with filter
         let filteredCount = try await database.read { db in
-            try await User
-                .where { $0.name == "Alice" }
+            try await Reminder
+                .where { $0.isFlagged == true }
                 .asSelect()
                 .fetchCount(db)
         }
 
-        #expect(filteredCount == 1)
+        #expect(filteredCount == 2) // Haircut and Team meeting are flagged
     }
 
     @Test("Table.all pattern works correctly")
     func testTableAllPattern() async throws {
-        // Insert sample data
-        try await database.insertSampleData()
+        // Sample data already loaded by withReminderData()
 
         // Test the Table.all pattern from SharingGRDB
-        let allUsers = try await database.read { db in
-            try await User.all.fetchAll(db)
+        let allReminders = try await database.read { db in
+            try await Reminder.all.fetchAll(db)
         }
 
-        let allPosts = try await database.read { db in
-            try await Post.all.fetchAll(db)
+        let allLists = try await database.read { db in
+            try await RemindersList.all.fetchAll(db)
         }
 
-        let allComments = try await database.read { db in
-            try await Comment.all.fetchAll(db)
+        let allTags = try await database.read { db in
+            try await Tag.all.fetchAll(db)
         }
 
-        #expect(allUsers.count == 2)
-        #expect(allPosts.count == 2)
-        #expect(allComments.count == 1)
+        #expect(allReminders.count == 6)
+        #expect(allLists.count == 2) // Home and Work
+        #expect(allTags.count == 4)
     }
 
     @Test("Complex queries with where clauses")
     func testComplexQueries() async throws {
-        // Insert sample data
-        try await database.insertSampleData()
+        // Sample data already loaded by withReminderData()
 
         // Test complex query with where and order
-        let publishedPosts = try await database.read { db in
-            try await Post
-                .where { $0.publishedAt != nil }
+        let flaggedReminders = try await database.read { db in
+            try await Reminder
+                .where { $0.isFlagged == true }
                 .order(by: \.title)
                 .asSelect()
                 .fetchAll(db)
         }
 
-        #expect(publishedPosts.count == 1)
-        #expect(publishedPosts.first?.title == "First Post")
+        #expect(flaggedReminders.count == 2)
+        #expect(flaggedReminders.first?.title == "Haircut")
 
         // Test query with multiple conditions
-        let specificUser = try await database.read { db in
-            try await User
-                .where { $0.name == "Alice" && $0.email == "alice@example.com" }
+        let specificReminder = try await database.read { db in
+            try await Reminder
+                .where { $0.title == "Groceries" && $0.remindersListID == 1 }
                 .asSelect()
                 .fetchOne(db)
         }
 
-        #expect(specificUser != nil)
-        #expect(specificUser?.id == 1)
+        #expect(specificReminder != nil)
+        #expect(specificReminder?.id == 1)
     }
 
     @Test("Update and delete operations")
     func testUpdateAndDelete() async throws {
-        // Insert sample data
-        try await database.insertSampleData()
+        // Sample data already loaded by withReminderData()
 
         // Test update
         try await database.write { db in
-            try await User
+            try await Reminder
                 .where { $0.id == 1 }
-                .update { $0.name = "Alice Updated" }
+                .update { $0.title = "Groceries Updated" }
                 .execute(db)
         }
 
-        let updatedUser = try await database.read { db in
-            try await User
+        let updatedReminder = try await database.read { db in
+            try await Reminder
                 .where { $0.id == 1 }
                 .asSelect()
                 .fetchOne(db)
         }
 
-        #expect(updatedUser?.name == "Alice Updated")
+        #expect(updatedReminder?.title == "Groceries Updated")
 
         // Test delete
         try await database.write { db in
-            try await Comment
-                .where { $0.id == 1 }
+            try await ReminderTag
+                .where { $0.reminderID == 1 && $0.tagID == 1 }
                 .delete()
                 .execute(db)
         }
 
-        let commentCount = try await database.read { db in
-            try await Comment.fetchCount(db)
+        let tagCount = try await database.read { db in
+            try await ReminderTag
+                .where { $0.reminderID == 1 }
+                .asSelect()
+                .fetchCount(db)
         }
 
-        #expect(commentCount == 0)
+        #expect(tagCount == 1) // Originally 2 tags, deleted 1
     }
 }
