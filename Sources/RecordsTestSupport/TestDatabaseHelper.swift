@@ -1,9 +1,6 @@
 import Dependencies
 import Foundation
 @testable import Records
-import ResourcePool
-import struct ResourcePool.Statistics
-import struct ResourcePool.Metrics
 import StructuredQueriesPostgres
 import Testing
 
@@ -272,8 +269,6 @@ private func storeTestDatabase(_ database: Database.TestDatabase) {
 /// Each test suite gets its own isolated database for data isolation.
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     private let setupMode: Database.TestDatabaseSetupMode
-    private let minConnections: Int?
-    private let maxConnections: Int?
 
     // Lazy database creation with Task-based synchronization
     private var _database: Database.TestDatabase?
@@ -292,21 +287,11 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
 
         // Create new task for database creation
         let task = Task<Database.TestDatabase, Error> {
-            // Create database
-            let db: Database.TestDatabase
-            if let minConnections = self.minConnections, let maxConnections = self.maxConnections {
-                db = try await Database.testDatabasePool(
-                    configuration: nil,
-                    minConnections: minConnections,
-                    maxConnections: maxConnections,
-                    prefix: "test"
-                )
-            } else {
-                db = try await Database.testDatabase(
-                    configuration: nil,
-                    prefix: "test"
-                )
-            }
+            // Create database with single connection
+            let db = try await Database.testDatabase(
+                configuration: nil,
+                prefix: "test"
+            )
 
             // Setup schema
             switch self.setupMode {
@@ -360,16 +345,8 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     ///
     /// - Parameters:
     ///   - setupMode: Schema and data setup mode
-    ///   - minConnections: Minimum connections per database (nil = single connection)
-    ///   - maxConnections: Maximum connections per database (nil = single connection)
-    public init(
-        setupMode: SetupMode,
-        minConnections: Int? = nil,
-        maxConnections: Int? = nil
-    ) {
+    public init(setupMode: SetupMode) {
         self.setupMode = setupMode.databaseSetupMode
-        self.minConnections = minConnections
-        self.maxConnections = maxConnections
     }
 
     public func read<T: Sendable>(
@@ -415,44 +392,5 @@ extension Database.TestDatabase {
     /// Creates a test database with Reminder schema and sample data (lazy initialization)
     public static func withReminderData() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withReminderData)
-    }
-
-    /// Creates a test database with connection pool for concurrency stress testing
-    ///
-    /// This creates a database with multiple connections to handle concurrent operations.
-    ///
-    /// **Use this for concurrency stress tests** that spawn 100+ parallel operations.
-    ///
-    /// ## Example
-    ///
-    /// ```swift
-    /// @Suite(
-    ///     "Concurrency Tests",
-    ///     .dependencies {
-    ///         $0.envVars = .development
-    ///         $0.defaultDatabase = Database.TestDatabase.withConnectionPool(
-    ///             setupMode: .withReminderData,
-    ///             minConnections: 5,
-    ///             maxConnections: 20
-    ///         )
-    ///     }
-    /// )
-    /// ```
-    ///
-    /// - Parameters:
-    ///   - setupMode: Schema and data setup mode
-    ///   - minConnections: Minimum connections in pool (default: 2)
-    ///   - maxConnections: Maximum connections in pool (default: 10)
-    /// - Returns: A lazy test database with connection pooling enabled
-    public static func withConnectionPool(
-        setupMode: LazyTestDatabase.SetupMode,
-        minConnections: Int = 2,
-        maxConnections: Int = 10
-    ) -> LazyTestDatabase {
-        LazyTestDatabase(
-            setupMode: setupMode,
-            minConnections: minConnections,
-            maxConnections: maxConnections
-        )
     }
 }

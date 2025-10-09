@@ -1,6 +1,6 @@
 # Testing Guide
 
-**Last Updated**: 2025-10-09 (assertQuery Implementation)
+**Last Updated**: 2025-10-09 (Test Lifecycle & PostgresNIO-Inspired Architecture)
 **Status**: ✅ Production-Ready
 
 This document explains the testing architecture for swift-records.
@@ -18,6 +18,7 @@ This document explains the testing architecture for swift-records.
 4. [Final Solution](#final-solution)
 5. [Best Practices](#best-practices)
 6. [Snapshot Testing with assertQuery](#snapshot-testing-with-assertquery)
+7. [Test Process Lifecycle & PostgresNIO-Inspired Architecture](#test-process-lifecycle--postgresnio-inspired-architecture)
 
 ---
 
@@ -1671,6 +1672,383 @@ extension MyType: Sendable {}
 
 ---
 
+## Test Process Lifecycle & PostgresNIO-Inspired Architecture
+
+**Added**: 2025-10-09
+**Status**: ✅ Resolved - All tests pass with clean process exit
+
+### The Problem: Tests Pass But Process Never Exits
+
+After implementing successful parallel test execution, we encountered a critical issue:
+
+**Symptoms**:
+- ✅ All tests execute successfully
+- ✅ Test results displayed correctly
+- ❌ **Process hangs forever** - never returns to shell
+- ❌ Both `swift test` and `xcodebuild test` (Cmd+U) hang
+- ❌ Requires manual `Ctrl+C` or `kill` to terminate
+
+**Impact**: While tests passed, CI/CD pipelines would timeout, and local development required manual intervention to exit.
+
+### Investigation Approach
+
+We investigated the issue systematically:
+
+1. **Initial Hypothesis**: Test cleanup issue
+   - **Tested**: Added explicit cleanup, removed test databases
+   - **Result**: No change - still hung
+
+2. **Second Hypothesis**: Database connection leak
+   - **Tested**: Monitored PostgreSQL connections during test runs
+   - **Result**: Connections properly released, not the issue
+
+3. **Third Hypothesis**: Async task lifecycle
+   - **Tested**: Checked for uncancelled tasks
+   - **Result**: Tasks cancelled, but something keeping event loop alive
+
+4. **Breakthrough**: Study PostgresNIO's own test suite
+   - **Location**: `/Users/coen/Developer/vapor/postgres-nio/Tests/IntegrationTests/PostgresClientTests.swift`
+   - **Discovery**: PostgresNIO tests use explicit `EventLoopGroup.shutdownGracefully()`
+
+### Key Insight from PostgresNIO
+
+PostgresNIO's test pattern revealed the missing piece:
+
+```swift
+// PostgresNIO test pattern
+func testExample() async throws {
+    let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+
+    // Add teardown BEFORE tests run
+    self.addTeardownBlock {
+        try await eventLoopGroup.shutdownGracefully()  // ← THE KEY!
+    }
+
+    let client = PostgresClient(
+        configuration: config,
+        eventLoopGroup: eventLoopGroup,
+        backgroundLogger: logger
+    )
+
+    await withThrowingTaskGroup(of: Void.self) { taskGroup in
+        taskGroup.addTask {
+            await client.run()
+        }
+
+        // Do all test queries...
+
+        taskGroup.cancelAll()  // Cancel tasks
+    }
+}
+```
+
+**Critical Discovery**: It's not enough to cancel the `client.run()` task. You must also **shut down the EventLoopGroup** for the process to exit cleanly.
+
+### Why EventLoopGroup Shutdown is Required
+
+**NIO's Event Loop Architecture**:
+1. `MultiThreadedEventLoopGroup` creates background threads for async I/O
+2. These threads run continuously, polling for events
+3. Even when idle, they keep the process alive
+4. Only `shutdownGracefully()` properly terminates these threads
+
+**Without shutdown**:
+```
+PostgresClient.run() cancelled → ✅
+Event loop threads still running → ❌ Process alive!
+Waiting for events that never come → ❌ Hangs forever
+```
+
+**With shutdown**:
+```
+PostgresClient.run() cancelled → ✅
+EventLoopGroup.shutdownGracefully() → ✅
+Event loop threads terminated → ✅ Process exits cleanly!
+```
+
+### The Solution: Shared Client with Proper Shutdown
+
+Instead of each test suite creating its own PostgresClient (causing "too many connections"), we implemented a **shared singleton PostgresClient** with proper lifecycle management:
+
+**Implementation** (`Sources/RecordsTestSupport/TestConnection.swift`):
+
+```swift
+import NIOCore
+import NIOPosix
+import PostgresNIO
+
+/// Global EventLoopGroup for all test clients
+/// Following PostgresNIO's pattern: one shared EventLoopGroup, shutdown in teardown
+private let testEventLoopGroup = MultiThreadedEventLoopGroup.singleton
+
+/// Shared PostgresClient for ALL test suites
+/// This prevents "too many connections" by using a single connection pool
+private actor SharedTestClient {
+    private var client: PostgresClient?
+    private var runTask: Task<Void, Never>?
+
+    func getOrCreateClient(configuration: PostgresClient.Configuration) async -> PostgresClient {
+        if let existing = client {
+            return existing
+        }
+
+        // Create shared client with connection pooling
+        let newClient = PostgresClient(
+            configuration: configuration,
+            eventLoopGroup: testEventLoopGroup,  // ← Shared EventLoopGroup
+            backgroundLogger: Logger(label: "test-db")
+        )
+        self.client = newClient
+
+        // Start client.run() once for the shared client
+        let task = Task {
+            await newClient.run()
+        }
+        self.runTask = task
+
+        // Register shutdown handler on first client creation
+        if !shutdownHandlerRegistered {
+            shutdownHandlerRegistered = true
+            atexit {
+                let semaphore = DispatchSemaphore(value: 0)
+                Task {
+                    await sharedTestClient.shutdown()
+                    semaphore.signal()
+                }
+                _ = semaphore.wait(timeout: .now() + .seconds(5))
+            }
+        }
+
+        // Give client time to initialize
+        try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+
+        return newClient
+    }
+
+    func shutdown() async {
+        // Cancel run task
+        runTask?.cancel()
+
+        // Wait for cancellation
+        if let task = runTask {
+            await task.value
+        }
+
+        // Shutdown EventLoopGroup - THIS IS THE KEY from PostgresNIO!
+        try? await testEventLoopGroup.shutdownGracefully()
+
+        client = nil
+        runTask = nil
+    }
+}
+
+private let sharedTestClient = SharedTestClient()
+private nonisolated(unsafe) var shutdownHandlerRegistered = false
+```
+
+**Architecture**:
+```
+All Test Suites → Shared PostgresClient (singleton)
+                       ↓
+                  Shared EventLoopGroup
+                       ↓
+                  Connection Pool
+                       ↓
+                  PostgreSQL Server
+```
+
+### Why This Solution Works
+
+**1. Singleton PostgresClient**:
+- All test suites share ONE PostgresClient
+- Prevents "too many connections" errors
+- Connection pooling handles concurrent access
+
+**2. Shared EventLoopGroup**:
+- Single `MultiThreadedEventLoopGroup.singleton`
+- All I/O operations use the same event loop
+- Efficient resource usage
+
+**3. atexit Shutdown Hook**:
+- Registers shutdown function on first client creation
+- Called automatically when process exits
+- Ensures clean shutdown even if tests are interrupted
+
+**4. Graceful Shutdown Sequence**:
+```swift
+1. Cancel client.run() task
+2. Wait for task completion
+3. Shutdown EventLoopGroup gracefully  ← Critical!
+4. Clean up resources
+```
+
+**5. Schema Isolation Preserved**:
+- Each test suite still gets its own PostgreSQL schema
+- Data isolation maintained via `SET search_path TO {schema}`
+- Shared client doesn't mean shared data
+
+### Connection Management Benefits
+
+**Before** (Multiple Clients):
+```
+Suite 1 → PostgresClient #1 (10 connections) → PostgreSQL
+Suite 2 → PostgresClient #2 (10 connections) → PostgreSQL
+Suite 3 → PostgresClient #3 (10 connections) → PostgreSQL
+...
+Suite 13 → PostgresClient #13 (10 connections) → PostgreSQL
+
+Total: 130 active connections (connection exhaustion risk)
+Event loops: 13 separate groups (resource waste)
+Shutdown: Incomplete (process hangs) ❌
+```
+
+**After** (Shared Client):
+```
+All Suites → Single PostgresClient (shared pool) → PostgreSQL
+                      ↓
+              Single EventLoopGroup
+                      ↓
+         Connection Pool (10-20 connections)
+                      ↓
+              PostgreSQL Server
+
+Total: 10-20 active connections (efficient!)
+Event loops: 1 shared group (efficient!)
+Shutdown: Complete with graceful shutdown ✅
+```
+
+### Test Database Creation Pattern
+
+**Simple Pattern** (Used by 99% of tests):
+```swift
+@Suite(
+    "My Tests",
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
+    }
+)
+struct MyTests {
+    @Dependency(\.defaultDatabase) var db
+
+    @Test func myTest() async throws {
+        // Use db normally - shared client handles everything
+        let results = try await db.read { db in
+            try await Reminder.all.fetchAll(db)
+        }
+    }
+}
+```
+
+**Under the hood**:
+1. `LazyTestDatabase` created for this suite
+2. Creates unique PostgreSQL schema on first use
+3. Connects via shared `SharedTestClient`
+4. Schema provides data isolation
+5. Shared client provides connection efficiency
+
+### Cleanup and Simplification
+
+After implementing the solution, we performed comprehensive cleanup:
+
+**Files Deleted** (4 files):
+1. `TestDatabase+PoolableResource.swift` - ResourcePool integration (no longer needed)
+2. `TestMetrics.swift` - No-op metrics methods (dead code)
+3. `QueryDecoderTests.swift` - Placeholder test (no value)
+4. `/tmp/test_runner.sh` - Workaround script (issue fixed)
+
+**Code Removed**:
+- ResourcePool package dependency from `Package.swift`
+- ResourcePool imports from test files
+- `withConnectionPool()` factory method - Unused after proving simple pattern works better
+- Connection pooling parameters from `LazyTestDatabase`
+
+**Simplified Architecture**:
+```swift
+// Before: Complex with unused pooling infrastructure
+LazyTestDatabase(
+    setupMode: .withReminderData,
+    minConnections: 2,  // Removed
+    maxConnections: 10   // Removed
+)
+
+// After: Simple and focused
+LazyTestDatabase(setupMode: .withReminderData)
+```
+
+### Lessons Learned
+
+**1. Study Upstream Patterns**
+
+When facing unfamiliar infrastructure issues:
+- ✅ **Look at how the library's own tests work**
+- ✅ PostgresNIO's test suite revealed EventLoopGroup shutdown
+- ✅ Real-world reference implementation beats guessing
+
+**2. NIO Event Loop Lifecycle is Critical**
+
+- ❌ Cancelling tasks is not enough
+- ✅ Must shutdown EventLoopGroup for clean exit
+- ✅ Use `atexit` for process-level cleanup
+- ✅ Follow the library's own patterns
+
+**3. Shared Resources for Tests**
+
+- ✅ Singleton PostgresClient prevents connection exhaustion
+- ✅ Schema isolation provides data separation
+- ✅ Shared infrastructure != shared state
+
+**4. Simplify After Solving**
+
+- ✅ Removed unused ResourcePool infrastructure
+- ✅ Deleted dead code and placeholder tests
+- ✅ Simplified API to minimal working pattern
+- ✅ ~200 lines of code removed
+
+**5. Document the Journey**
+
+- Future developers facing similar issues can learn from our investigation
+- PostgresNIO inspiration explicitly credited
+- Clear before/after comparison
+
+### Current Status
+
+**Test Execution**: ✅ Perfect
+```
+swift test → All tests pass, clean exit
+xcodebuild test (Cmd+U) → All tests pass, clean exit
+```
+
+**Connection Management**: ✅ Optimal
+- Shared PostgresClient singleton
+- 10-20 connections total (vs previous 130+)
+- No connection exhaustion
+- Efficient resource usage
+
+**Process Lifecycle**: ✅ Clean
+- Tests execute
+- Cleanup runs
+- EventLoopGroup shuts down gracefully
+- Process exits immediately
+- No hanging, no manual intervention needed
+
+**Code Quality**: ✅ Simplified
+- Removed ~200 lines of unused code
+- Deleted 4 obsolete files
+- Clear, focused architecture
+- Well-documented patterns
+
+### Acknowledgments
+
+This solution draws direct inspiration from:
+- **postgres-nio** test suite (`/Users/coen/Developer/vapor/postgres-nio/Tests/IntegrationTests/PostgresClientTests.swift`)
+- PostgresNIO's pattern of using `EventLoopGroup.shutdownGracefully()` in test teardown
+- SwiftNIO's event loop architecture and lifecycle management
+
+We studied their approach, adapted it for our test architecture, and simplified it to the minimal working pattern.
+
+---
+
 ## Performance Characteristics
 
 ### Typical Test Run
@@ -1804,7 +2182,12 @@ struct MyTests {
 
 ## Summary
 
-**The key insight**: Don't fight PostgreSQL's concurrency model or Swift's actor model. Give each suite its own database creation path, bypass shared coordination points, and let PostgreSQL do what it does best—handle concurrent transactions.
+**The key insights**:
+
+1. **Don't fight PostgreSQL's concurrency model** - Give each suite its own database schema, let PostgreSQL handle concurrent transactions
+2. **Study upstream patterns** - PostgresNIO's test suite revealed the EventLoopGroup shutdown requirement
+3. **Share infrastructure, isolate data** - Singleton PostgresClient for efficiency, PostgreSQL schemas for isolation
+4. **Proper lifecycle management is critical** - EventLoopGroup.shutdownGracefully() is required for clean process exit
 
 This architecture:
 - ✅ Passes cmd+U (parallel execution)
@@ -1815,5 +2198,7 @@ This architecture:
 - ✅ Full snapshot testing with assertQuery
 - ✅ Parameter pack support for complex queries
 - ✅ Swift 6 strict concurrency compliant
+- ✅ **Clean process exit** - No hanging, no manual intervention
+- ✅ **PostgresNIO-inspired** - Proper NIO event loop lifecycle management
 
-**Status**: ✅ Production-ready with comprehensive testing infrastructure
+**Status**: ✅ Production-ready with comprehensive testing infrastructure and clean lifecycle management
