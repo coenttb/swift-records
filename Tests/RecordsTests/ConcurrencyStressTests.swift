@@ -7,9 +7,16 @@ import Testing
 @Suite(
     "Concurrency Stress Tests",
     .disabled(),
+    .serialized,
     .dependencies {
         $0.envVars = .development
-        $0.defaultDatabase = try await Database.TestDatabase.withReminderData()
+        // Use connection pool for proper concurrency testing
+        // Reduced from 10/50 to 5/20 to prevent connection exhaustion when running all test suites
+        $0.defaultDatabase = try await Database.TestDatabase.withConnectionPool(
+            setupMode: .withReminderData,
+            minConnections: 5,
+            maxConnections: 20
+        )
     }
 )
 struct ConcurrencyStressTests {
@@ -30,11 +37,11 @@ struct ConcurrencyStressTests {
             try await Reminder.fetchCount(db)
         }
 
-        // Insert records concurrently
-        await withTaskGroup(of: Void.self) { group in
+        // Insert records concurrently - all should succeed with proper connection pool
+        try await withThrowingTaskGroup(of: Void.self) { group in
             for i in 1...count {
                 group.addTask {
-                    try? await db.write { db in
+                    try await db.write { db in
                         try await Reminder.insert {
                             Reminder.Draft(
                                 remindersListID: 1,
@@ -44,9 +51,12 @@ struct ConcurrencyStressTests {
                     }
                 }
             }
+
+            // Wait for all tasks - will throw if any fail
+            try await group.waitForAll()
         }
 
-        // Verify all inserted
+        // Verify all inserted - with proper connection pool, 100% should succeed
         let countAfter = try await db.read { db in
             try await Reminder.fetchCount(db)
         }
@@ -72,32 +82,74 @@ struct ConcurrencyStressTests {
             try await Reminder.fetchCount(db)
         }
 
-        // Insert records concurrently
-        await withTaskGroup(of: Void.self) { group in
+        // Track results for diagnostics
+        struct Result: Sendable {
+            let index: Int
+            let success: Bool
+            let error: String?
+        }
+
+        let results = await withTaskGroup(of: Result.self) { group in
             for i in 1...count {
                 group.addTask {
-                    try? await db.write { db in
-                        try await Reminder.insert {
-                            Reminder.Draft(
-                                remindersListID: (i % 3) + 1,
-                                title: "Stress \(i)"
-                            )
-                        }.execute(db)
+                    do {
+                        try await db.write { db in
+                            try await Reminder.insert {
+                                Reminder.Draft(
+                                    remindersListID: (i % 2) + 1,  // Only IDs 1 and 2 exist
+                                    title: "Stress \(i)"
+                                )
+                            }.execute(db)
+                        }
+                        return Result(index: i, success: true, error: nil)
+                    } catch {
+                        // Use String(reflecting:) to bypass privacy protection
+                        return Result(index: i, success: false, error: String(reflecting: error))
                     }
                 }
             }
+
+            var allResults: [Result] = []
+            for await result in group {
+                allResults.append(result)
+            }
+            return allResults
         }
 
-        // Verify most inserted (allow for some failures under high load)
+        // Analyze results
+        let successes = results.filter { $0.success }.count
+        let failures = results.filter { !$0.success }
+
+        // If there are failures, print diagnostics
+        if !failures.isEmpty {
+            print("\n=== ⚠️ Concurrency Test Had Failures ===")
+            print("Total operations: \(count)")
+            print("Successes: \(successes) (\(Int(Double(successes) / Double(count) * 100))%)")
+            print("Failures: \(failures.count)")
+
+            print("\n=== Sample Failures (first 10) ===")
+            for failure in failures.prefix(10) {
+                print("  #\(failure.index): \(failure.error ?? "unknown")")
+            }
+
+            // Group errors by type
+            let errorTypes = Dictionary(grouping: failures) { $0.error ?? "unknown" }
+            print("\n=== Error Distribution ===")
+            for (errorType, instances) in errorTypes.sorted(by: { $0.value.count > $1.value.count }) {
+                print("  \(instances.count)x: \(errorType)")
+            }
+        }
+
+        // Verify actual inserted count
         let countAfter = try await db.read { db in
             try await Reminder.fetchCount(db)
         }
+        let actualInserted = countAfter - countBefore
 
-        let inserted = countAfter - countBefore
-        // Under high concurrency (500 parallel writes), expect 60%+ success rate
-        // System stabilizes at ~67% under extreme load due to connection pool and resource limits
-        // This is expected behavior - demonstrates actual system capacity
-        #expect(inserted >= Int(Double(count) * 0.60))
+        // With proper connection pool (50 max connections), all 500 should succeed
+        // They queue and wait for available connections
+        #expect(successes == count, "Expected all \(count) operations to succeed, but only \(successes) succeeded")
+        #expect(actualInserted == count, "Expected \(count) records inserted, but got \(actualInserted)")
 
         // Cleanup
         try await db.write { db in
@@ -170,19 +222,23 @@ struct ConcurrencyStressTests {
     func testConnectionPoolStress() async throws {
         let requests = 500
 
-        await withTaskGroup(of: Void.self) { group in
-            for i in 1...requests {
+        // All requests should succeed - they queue for available connections
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 1...requests {
                 group.addTask {
-                    try? await db.read { db in
+                    try await db.read { db in
                         // Hold connection briefly
                         try await Task.sleep(nanoseconds: 5_000_000) // 5ms
                         _ = try await Reminder.select { $0.id }.limit(1).fetchAll(db)
                     }
                 }
             }
+
+            // Wait for all - will throw if any fail
+            try await group.waitForAll()
         }
 
-        // If we get here, pool handled all requests
+        // All 500 requests completed successfully
         #expect(true)
     }
 
@@ -206,20 +262,22 @@ struct ConcurrencyStressTests {
 
         let ids = inserted.map(\.id)
 
-        // Update all records concurrently
-        await withTaskGroup(of: Void.self) { group in
+        // Update all records concurrently - all should succeed
+        try await withThrowingTaskGroup(of: Void.self) { group in
             for id in ids {
                 group.addTask {
-                    try? await db.write { db in
+                    try await db.write { db in
                         try await Reminder.find(id)
                             .update { $0.title = "Updated \(id)" }
                             .execute(db)
                     }
                 }
             }
+
+            try await group.waitForAll()
         }
 
-        // Verify all updates
+        // Verify all updates succeeded
         let updated = try await db.read { db in
             try await Reminder.find(ids).fetchAll(db)
         }
@@ -302,18 +360,20 @@ struct ConcurrencyStressTests {
 
         let ids = inserted.map(\.id)
 
-        // Delete all records concurrently
-        await withTaskGroup(of: Void.self) { group in
+        // Delete all records concurrently - all should succeed
+        try await withThrowingTaskGroup(of: Void.self) { group in
             for id in ids {
                 group.addTask {
-                    try? await db.write { db in
+                    try await db.write { db in
                         try await Reminder.find(id).delete().execute(db)
                     }
                 }
             }
+
+            try await group.waitForAll()
         }
 
-        // Verify all deleted
+        // Verify all deleted successfully
         let remaining = try await db.read { db in
             try await Reminder.find(ids).fetchAll(db)
         }
@@ -332,10 +392,11 @@ struct ConcurrencyStressTests {
             try await Reminder.where { $0.title.hasPrefix("Transaction") }.delete().execute(db)
         }
 
-        await withTaskGroup(of: Void.self) { group in
+        // All transactions should succeed
+        try await withThrowingTaskGroup(of: Void.self) { group in
             for i in 1...transactionCount {
                 group.addTask {
-                    try? await db.withTransaction { db in
+                    try await db.withTransaction { db in
                         // Each transaction inserts 2 records
                         try await Reminder.insert {
                             Reminder.Draft(
@@ -350,9 +411,11 @@ struct ConcurrencyStressTests {
                     }
                 }
             }
+
+            try await group.waitForAll()
         }
 
-        // Verify all committed
+        // Verify all committed successfully
         let count = try await db.read { db in
             try await Reminder.where { $0.title.hasPrefix("Transaction") }.fetchCount(db)
         }

@@ -7,24 +7,41 @@ extension Database.TestDatabase: PoolableResource {
         let setupMode: Database.TestDatabaseSetupMode
         let configuration: PostgresClient.Configuration?
         let prefix: String
+        let minConnections: Int?
+        let maxConnections: Int?
 
         public init(
             setupMode: Database.TestDatabaseSetupMode,
             configuration: PostgresClient.Configuration? = nil,
-            prefix: String = "test"
+            prefix: String = "test",
+            minConnections: Int? = nil,
+            maxConnections: Int? = nil
         ) {
             self.setupMode = setupMode
             self.configuration = configuration
             self.prefix = prefix
+            self.minConnections = minConnections
+            self.maxConnections = maxConnections
         }
     }
 
     public static func create(config: Config) async throws -> Database.TestDatabase {
         // Create database with isolated schema
-        let database = try await Database.testDatabase(
-            configuration: config.configuration,
-            prefix: config.prefix
-        )
+        // Use connection pool if min/max connections specified, otherwise single connection
+        let database: Database.TestDatabase
+        if let minConnections = config.minConnections, let maxConnections = config.maxConnections {
+            database = try await Database.testDatabasePool(
+                configuration: config.configuration,
+                minConnections: minConnections,
+                maxConnections: maxConnections,
+                prefix: config.prefix
+            )
+        } else {
+            database = try await Database.testDatabase(
+                configuration: config.configuration,
+                prefix: config.prefix
+            )
+        }
 
         // Setup schema based on mode
         switch config.setupMode {

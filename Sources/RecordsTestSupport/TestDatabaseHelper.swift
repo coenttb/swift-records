@@ -249,10 +249,13 @@ extension Database.Writer {
 /// - Comprehensive metrics (wait times, handoff rates, utilization)
 /// - Sophisticated pre-warming (synchronous first resource + background remainder)
 /// - Resource validation and cycling capabilities
+///
+/// Each test suite gets its own isolated database pool for data isolation.
+/// Connection limits are managed per-database to prevent PostgreSQL exhaustion.
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     private let pool: ResourcePool<Database.TestDatabase>
 
-    public enum SetupMode {
+    public enum SetupMode: Sendable {
         case empty
         case withSchema
         case withSampleData
@@ -277,18 +280,24 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     ///   - capacity: Maximum number of databases in pool (default 1 for suite-level usage)
     ///   - warmup: Whether to pre-create resources (default true)
     ///   - timeout: Default timeout for resource acquisition (default 30s)
+    ///   - minConnections: Minimum connections per database (nil = single connection)
+    ///   - maxConnections: Maximum connections per database (nil = single connection)
     public init(
         setupMode: SetupMode,
         capacity: Int = 1,
         warmup: Bool = true,
-        timeout: Duration = .seconds(30)
+        timeout: Duration = .seconds(30),
+        minConnections: Int? = nil,
+        maxConnections: Int? = nil
     ) async throws {
         self.pool = try await ResourcePool(
             capacity: capacity,
             resourceConfig: Database.TestDatabase.Config(
                 setupMode: setupMode.databaseSetupMode,
                 configuration: nil,
-                prefix: "test"
+                prefix: "test",
+                minConnections: minConnections,
+                maxConnections: maxConnections
             ),
             warmup: warmup
         )
@@ -396,6 +405,58 @@ extension Database.TestDatabase {
             setupMode: setupMode,
             capacity: capacity,
             warmup: true
+        )
+    }
+
+    /// Creates a test database with connection pool for concurrency stress testing
+    ///
+    /// Unlike `withReminderData()` which uses a single connection, this creates
+    /// a database with a proper connection pool that can handle many concurrent requests.
+    ///
+    /// **Use this for concurrency stress tests** that spawn 100+ parallel operations.
+    ///
+    /// ## Architecture
+    ///
+    /// - Creates ONE test schema (one isolated database)
+    /// - Uses `testDatabasePool()` with multiple connections (not `testDatabase()`)
+    /// - All concurrent requests queue and wait for available connections
+    /// - Proper connection pooling behavior under load
+    /// - Each test suite gets isolated database to prevent data pollution
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// @Suite(
+    ///     "Concurrency Tests",
+    ///     .dependencies {
+    ///         $0.envVars = .development
+    ///         $0.defaultDatabase = try await Database.TestDatabase.withConnectionPool(
+    ///             setupMode: .withReminderData,
+    ///             minConnections: 5,
+    ///             maxConnections: 20
+    ///         )
+    ///     }
+    /// )
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - setupMode: Schema and data setup mode
+    ///   - minConnections: Minimum connections in pool (default: 5, reduced from 10)
+    ///   - maxConnections: Maximum connections in pool (default: 20, reduced from 50)
+    /// - Returns: A lazy test database with connection pooling enabled
+    public static func withConnectionPool(
+        setupMode: LazyTestDatabase.SetupMode,
+        minConnections: Int = 5,
+        maxConnections: Int = 20
+    ) async throws -> LazyTestDatabase {
+        // Use LazyTestDatabase with connection pool config
+        // Reduced connection limits to prevent PostgreSQL exhaustion when running many test suites
+        try await LazyTestDatabase(
+            setupMode: setupMode,
+            capacity: 1,  // Only need 1 database (it has connection pool internally)
+            warmup: true,
+            minConnections: minConnections,
+            maxConnections: maxConnections
         )
     }
 }

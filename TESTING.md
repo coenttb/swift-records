@@ -463,7 +463,240 @@ let updated = try await Reminder
 try await RemindersList.find(1).delete().execute(db)
 ```
 
-### 5. Test Organization
+### 5. Concurrency Testing
+
+**Never use `try?` in concurrent tests** - it silently swallows errors:
+
+```swift
+// ❌ WRONG - hides all errors
+await withTaskGroup(of: Void.self) { group in
+    for i in 1...100 {
+        group.addTask {
+            try? await db.write { db in
+                try await Record.insert { ... }.execute(db)
+            }
+        }
+    }
+}
+```
+
+**Use `withThrowingTaskGroup` to surface errors**:
+
+```swift
+// ✅ CORRECT - errors are visible
+try await withThrowingTaskGroup(of: Void.self) { group in
+    for i in 1...100 {
+        group.addTask {
+            try await db.write { db in
+                try await Record.insert { ... }.execute(db)
+            }
+        }
+    }
+    try await group.waitForAll()
+}
+```
+
+**For concurrency stress tests (100+ parallel operations)**:
+
+```swift
+@Suite(
+    "Concurrency Tests",
+    .dependencies {
+        $0.envVars = .development
+        // Use connection pool, not single connection
+        $0.defaultDatabase = try await Database.TestDatabase.withConnectionPool(
+            setupMode: .withReminderData,
+            minConnections: 10,
+            maxConnections: 50
+        )
+    }
+)
+struct ConcurrencyTests {
+    @Dependency(\.defaultDatabase) var db
+
+    @Test func concurrent500Inserts() async throws {
+        // All 500 should succeed - they queue for connections
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for i in 1...500 {
+                group.addTask {
+                    try await db.write { ... }
+                }
+            }
+            try await group.waitForAll()
+        }
+    }
+}
+```
+
+**Key differences**:
+- `withReminderData()` → Single connection (for normal tests)
+- `withConnectionPool()` → 10-50 connections (for stress tests)
+
+**Common pitfall**: A test with 67% success rate was hiding foreign key violations with `try?`. After removing `try?`, the real error became visible: using `remindersListID=3` when only IDs 1 and 2 existed.
+
+### 6. Resource Pooling Patterns: Lessons from swift-html-to-pdf
+
+**Investigation Date**: 2025-10-09
+
+When investigating cmd+U hanging issues, we explored using `@globalActor` patterns from `swift-html-to-pdf` to share resource pools across test suites and prevent connection exhaustion.
+
+#### The swift-html-to-pdf Pattern
+
+```swift
+/// Global shared pool actor ensures only one pool exists across all consumers
+@globalActor
+private actor WebViewPoolActor {
+    static let shared = WebViewPoolActor()
+    private var sharedPool: ResourcePool<WKWebViewResource>?
+
+    func getOrCreatePool(
+        provider: @escaping @Sendable () async throws -> ResourcePool<WKWebViewResource>
+    ) async throws -> ResourcePool<WKWebViewResource> {
+        if let existing = sharedPool {
+            return existing
+        }
+        let newPool = try await provider()
+        sharedPool = newPool
+        return newPool
+    }
+}
+```
+
+**Why it works for WebViews**:
+- ✅ **WebViews are stateless** - Can be safely reused across different rendering tasks
+- ✅ **No data pollution** - Each render is independent
+- ✅ **Resource sharing is safe** - Multiple tasks can share the same WebView pool
+- ✅ **Prevents resource exhaustion** - One shared pool instead of many
+
+#### Why @globalActor Fails for Databases
+
+**Problem: Data Pollution**
+
+When we applied this pattern to test databases:
+
+```swift
+@globalActor
+private actor TestDatabasePoolActor {
+    static let shared = TestDatabasePoolActor()
+    private var sharedPools: [String: ResourcePool<Database.TestDatabase>] = [:]
+
+    func getOrCreatePool(key: String, provider: ...) async throws -> ResourcePool<...> {
+        if let existing = sharedPools[key] {
+            return existing  // ❌ WRONG: Multiple suites share same database!
+        }
+        // ...
+    }
+}
+```
+
+**What happened**:
+1. Suite A with `.withReminderData()` gets pool key `"reminderData_1_nil_nil"`
+2. Suite B also with `.withReminderData()` gets **THE SAME pool** (same key)
+3. Suite A deletes some records in tests
+4. Suite B checks out the same database and sees Suite A's modifications
+5. Tests fail: `Expectation failed: (deleted?.id → nil) == (id → 7)`
+
+**Actual test failure**:
+```
+􀢄 Test "DELETE with RETURNING" recorded an issue at DeleteExecutionTests.swift:69:9:
+   Expectation failed: (deleted?.id → nil) == (id → 7)
+􀢄 Test "DELETE with RETURNING" recorded an issue at DeleteExecutionTests.swift:70:9:
+   Expectation failed: (deleted?.title → nil) == "Haircut test"
+```
+
+The database record was already deleted by another suite sharing the same pool!
+
+#### Key Insight: Stateful vs Stateless Resources
+
+| Aspect | WebViews (Stateless) | Databases (Stateful) |
+|--------|---------------------|---------------------|
+| **Reusability** | ✅ Can be safely reused | ❌ Cannot be shared between suites |
+| **Data Isolation** | N/A (no persistent state) | ✅ **Critical requirement** |
+| **Sharing Pattern** | `@globalActor` perfect | ❌ `@globalActor` causes pollution |
+| **Resource Exhaustion** | Solved by sharing | **Must solve differently** |
+
+#### The Correct Solution: Reduced Connection Limits
+
+Instead of sharing databases (which causes data pollution), we **reduce per-suite connection limits**:
+
+```swift
+public static func withConnectionPool(
+    setupMode: LazyTestDatabase.SetupMode,
+    minConnections: Int = 5,    // Reduced from 10
+    maxConnections: Int = 20    // Reduced from 50
+) async throws -> LazyTestDatabase {
+    try await LazyTestDatabase(
+        setupMode: setupMode,
+        capacity: 1,
+        warmup: true,
+        minConnections: minConnections,
+        maxConnections: maxConnections
+    )
+}
+```
+
+**Why this works**:
+- Each test suite gets **its own isolated database** (no data pollution)
+- Each database has **reduced connection pool** (5-20 instead of 10-50)
+- PostgreSQL can handle ~13 suites × 20 connections = 260 connections (within default 400 limit)
+- Tests maintain data isolation while avoiding connection exhaustion
+
+#### Comparison
+
+**@globalActor Approach (swift-html-to-pdf)**:
+```
+All Suites → Shared WebView Pool (capacity=5, maxConnections=50)
+    ├─> WebView #1 ✅ Stateless, safe to share
+    ├─> WebView #2 ✅ Stateless, safe to share
+    └─> WebView #3 ✅ Stateless, safe to share
+```
+
+**Isolated Databases Approach (swift-records)**:
+```
+Suite 1 → Database Pool #1 (capacity=1, maxConnections=20)
+Suite 2 → Database Pool #2 (capacity=1, maxConnections=20)
+Suite 3 → Database Pool #3 (capacity=1, maxConnections=20)
+    ├─> Each suite has isolated data ✅
+    ├─> Total connections manageable ✅
+    └─> No actor bottleneck ✅
+```
+
+#### Results
+
+**With @globalActor (Data Pollution)**:
+- ❌ DeleteExecutionTests: 8 of 9 tests failed
+- ❌ Data missing from shared database
+- ❌ Unpredictable test failures
+- ✅ No connection exhaustion
+
+**With Isolated Databases + Reduced Connections**:
+- ✅ DeleteExecutionTests: All 9 tests passed
+- ✅ Complete data isolation
+- ✅ Predictable test behavior
+- ⚠️ cmd+U still has some hanging issues (under investigation)
+
+#### Lessons Learned
+
+1. **@globalActor is powerful for stateless resources** - Works perfectly for WebViews, cache pools, etc.
+2. **Stateful resources need isolation** - Databases, file handles, etc. cannot be safely shared
+3. **Connection limits are the real constraint** - Solve exhaustion by reducing per-suite connections, not sharing databases
+4. **Data isolation is non-negotiable** - Test reliability depends on isolated state
+5. **Learn from patterns but adapt for context** - swift-html-to-pdf taught us the pattern, but we needed a different solution
+
+#### Current Status
+
+**Individual Suites**: ✅ All pass with proper data isolation
+**cmd+U (All Suites)**: ⚠️ Still investigating occasional hangs
+**Connection Management**: ✅ Reduced limits prevent exhaustion
+**Data Isolation**: ✅ Each suite has its own database
+
+**Next Steps**:
+- Further reduce connection pool sizes if needed (try 2 min / 10 max)
+- Investigate if any tests are not cleaning up connections properly
+- Consider `.serialized` trait for resource-heavy test suites
+- Monitor PostgreSQL connection usage during cmd+U
+
+### 7. Test Organization
 
 **By operation type**:
 - `SelectExecutionTests.swift` - SELECT operations
@@ -475,6 +708,7 @@ try await RemindersList.find(1).delete().execute(db)
 - `TransactionTests.swift` - Transaction management
 - `MigrationTests.swift` - Schema migrations
 - `PostgresJSONBTests.swift` - JSONB operations
+- `ConcurrencyStressTests.swift` - High-concurrency scenarios (disabled by default)
 
 ---
 
