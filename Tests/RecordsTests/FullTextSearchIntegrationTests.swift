@@ -118,14 +118,28 @@ struct FullTextSearchIntegrationTests {
             .returning(\.self)
             .fetchAll(db)
 
-            // Verify article was inserted
-            #expect(inserted.count == 1)
-            #expect(inserted[0].title == "Testing Full-Text Search")
+            let articleId = inserted[0].id
 
-            // Note: We can't directly access search_vector from Article model,
-            // but we can verify it works by searching
-            let allArticles = try await Article.all.fetchAll(db)
-            #expect(allArticles.count == 5) // 4 initial + 1 new
+            // Verify search vector was populated: can find by title term
+            let searchTitle = try await Article
+                .where { $0.match("Testing") }
+                .fetchAll(db)
+            #expect(searchTitle.count == 1)
+            #expect(searchTitle[0].id == articleId)
+
+            // Verify search vector includes body content
+            let searchBody = try await Article
+                .where { $0.match("population") }
+                .fetchAll(db)
+            #expect(searchBody.count == 1)
+            #expect(searchBody[0].id == articleId)
+
+            // Verify search vector includes author
+            let searchAuthor = try await Article
+                .where { $0.match("Diana") }
+                .fetchAll(db)
+            #expect(searchAuthor.count == 1)
+            #expect(searchAuthor[0].id == articleId)
         }
     }
 
@@ -145,6 +159,13 @@ struct FullTextSearchIntegrationTests {
 
             let articleId = inserted[0].id
 
+            // Verify we can find it with original content
+            let beforeUpdate = try await Article
+                .where { $0.match("Original") }
+                .fetchAll(db)
+            #expect(beforeUpdate.count == 1)
+            #expect(beforeUpdate[0].id == articleId)
+
             // Update article
             try await Article
                 .where { $0.id == articleId }
@@ -154,135 +175,19 @@ struct FullTextSearchIntegrationTests {
                 }
                 .execute(db)
 
-            // Verify update
-            let updated = try await Article
-                .where { $0.id == articleId }
-                .fetchOne(db)
-
-            #expect(updated?.title == "Updated Title")
-            #expect(updated?.body == "Updated body content")
-        }
-    }
-
-    @Test("Multiple articles can be inserted with FTS")
-    func multipleInserts() async throws {
-        try await database.withRollback { db in
-            try await Article.insert {
-                Article.Draft(
-                    title: "Article One",
-                    body: "First test article",
-                    author: "Author A"
-                )
-                Article.Draft(
-                    title: "Article Two",
-                    body: "Second test article",
-                    author: "Author B"
-                )
-                Article.Draft(
-                    title: "Article Three",
-                    body: "Third test article",
-                    author: "Author C"
-                )
-            }.execute(db)
-
-            let allArticles = try await Article.all.fetchAll(db)
-            #expect(allArticles.count == 7) // 4 initial + 3 new
-        }
-    }
-
-    // MARK: - Data Verification
-
-    @Test("Initial test data is loaded correctly")
-    func initialDataLoaded() async throws {
-        let articles = try await database.read { db in
-            try await Article.all.fetchAll(db)
-        }
-
-        #expect(articles.count == 4)
-
-        // Verify we have expected articles
-        let titles = Set(articles.map(\.title))
-        #expect(titles.contains("PostgreSQL Full-Text Search"))
-        #expect(titles.contains("Swift Concurrency Guide"))
-        #expect(titles.contains("Database Indexing"))
-        #expect(titles.contains("Server-Side Swift"))
-    }
-
-    @Test("Articles by specific author")
-    func articlesByAuthor() async throws {
-        let aliceArticles = try await database.read { db in
-            try await Article
-                .where { $0.author == "Alice" }
+            // Verify search vector was updated: old term no longer matches
+            let searchOld = try await Article
+                .where { $0.match("Original") }
                 .fetchAll(db)
-        }
+            #expect(searchOld.count == 0)
 
-        #expect(aliceArticles.count == 2)
-
-        let titles = Set(aliceArticles.map(\.title))
-        #expect(titles.contains("PostgreSQL Full-Text Search"))
-        #expect(titles.contains("Database Indexing"))
-    }
-
-    @Test("Find article by title substring")
-    func findByTitleSubstring() async throws {
-        let articles = try await database.read { db in
-            try await Article
-                .where { $0.title.like("%Swift%") }
+            // Verify search vector was updated: new term matches
+            let searchNew = try await Article
+                .where { $0.match("Updated") }
                 .fetchAll(db)
-        }
-
-        #expect(articles.count == 2)
-
-        let titles = Set(articles.map(\.title))
-        #expect(titles.contains("Swift Concurrency Guide"))
-        #expect(titles.contains("Server-Side Swift"))
-    }
-
-    // MARK: - CRUD Operations with FTS
-
-    @Test("Insert, update, and delete with FTS triggers")
-    func crudWithFTS() async throws {
-        try await database.withRollback { db in
-            // Insert
-            let inserted = try await Article.insert {
-                Article.Draft(
-                    title: "CRUD Test Article",
-                    body: "Testing create, read, update, delete operations",
-                    author: "Frank"
-                )
-            }
-            .returning(\.id)
-            .fetchAll(db)
-
-            let articleId = inserted[0]
-
-            // Read
-            let fetched = try await Article
-                .where { $0.id == articleId }
-                .fetchOne(db)
-            #expect(fetched?.title == "CRUD Test Article")
-
-            // Update
-            try await Article
-                .where { $0.id == articleId }
-                .update { $0.title = "Updated CRUD Test" }
-                .execute(db)
-
-            let updated = try await Article
-                .where { $0.id == articleId }
-                .fetchOne(db)
-            #expect(updated?.title == "Updated CRUD Test")
-
-            // Delete
-            try await Article
-                .where { $0.id == articleId }
-                .delete()
-                .execute(db)
-
-            let deleted = try await Article
-                .where { $0.id == articleId }
-                .fetchOne(db)
-            #expect(deleted == nil)
+            #expect(searchNew.count == 1)
+            #expect(searchNew[0].id == articleId)
+            #expect(searchNew[0].title == "Updated Title")
         }
     }
 
@@ -346,17 +251,25 @@ struct FullTextSearchIntegrationTests {
     @Test("Search with ranking by relevance")
     func searchWithRanking() async throws {
         do {
-            let articles = try await database.read { db in
+            // Search for "Swift" - appears in 2 articles with different weights
+            // "Swift Concurrency Guide" - "Swift" in title (weight A) and body (weight B)
+            // "Server-Side Swift" - "Swift" in title (weight A) only
+            let results = try await database.read { db in
                 try await Article
-                    .where { $0.match("database") }
+                    .where { $0.match("Swift") }
+                    .order { $0.rank("Swift") }
                     .fetchAll(db)
             }
 
-            // Should find at least one article
-            #expect(articles.count >= 1)
+            // Should find 2 articles with Swift
+            #expect(results.count == 2)
 
-            let titles = Set(articles.map(\.title))
-            #expect(titles.contains("Database Indexing"))
+            // First result should have higher rank (appears in both title and body)
+            let firstArticle = results[0]
+            let secondArticle = results[1]
+
+            #expect(firstArticle.title == "Swift Concurrency Guide")
+            #expect(secondArticle.title == "Server-Side Swift")
         } catch {
             print("❌ Search with ranking failed: \(String(reflecting: error))")
             throw error
@@ -447,6 +360,53 @@ struct FullTextSearchIntegrationTests {
             #expect(titles.contains("Swift Concurrency Guide") || titles.contains("PostgreSQL Full-Text Search"))
         } catch {
             print("❌ Web search syntax failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Weighted ranking prioritizes title matches")
+    func weightedRanking() async throws {
+        do {
+            // Search for "Swift" with custom weights favoring title (A) heavily
+            // Weights: [D, C, B, A] = [0.1, 0.2, 0.4, 1.0]
+            let results = try await database.read { db in
+                try await Article
+                    .where { $0.match("Swift") }
+                    .order { $0.rank("Swift", weights: [0.1, 0.2, 0.4, 1.0]) }
+                    .fetchAll(db)
+            }
+
+            #expect(results.count == 2)
+
+            // Both articles have "Swift" in title (weight A)
+            // "Swift Concurrency Guide" also has "Swift" in body (weight B)
+            // With these weights, "Swift Concurrency Guide" should rank higher
+            let firstArticle = results[0]
+            let secondArticle = results[1]
+
+            #expect(firstArticle.title == "Swift Concurrency Guide")
+            #expect(secondArticle.title == "Server-Side Swift")
+        } catch {
+            print("❌ Weighted ranking failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Coverage-based ranking for phrase searches")
+    func rankCoverageTest() async throws {
+        do {
+            // Use rankCoverage which considers proximity and coverage
+            let results = try await database.read { db in
+                try await Article
+                    .where { $0.match("PostgreSQL") }
+                    .order { $0.rankCoverage("PostgreSQL") }
+                    .fetchAll(db)
+            }
+
+            #expect(results.count == 1)
+            #expect(results[0].title == "PostgreSQL Full-Text Search")
+        } catch {
+            print("❌ Coverage-based ranking failed: \(String(reflecting: error))")
             throw error
         }
     }
