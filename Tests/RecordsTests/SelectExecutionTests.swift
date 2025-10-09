@@ -86,7 +86,7 @@ struct SelectExecutionTests {
         let reminders = try await db.read { db in
             try await Reminder.where { $0.priority.in(priorities) }.fetchAll(db)
         }
-        #expect(reminders.count == 2)
+        #expect(reminders.count == 3)
         #expect(reminders.allSatisfy { $0.priority == .low || $0.priority == .high })
     }
 

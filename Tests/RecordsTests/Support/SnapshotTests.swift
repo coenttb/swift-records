@@ -15,7 +15,6 @@ import Testing
 /// - SnapshotTests+Delete.swift - DELETE patterns
 @Suite(
   "Snapshot Tests",
-//  .disabled(),
   .snapshots(record: .never),
   .dependencies {
     $0.envVars = .development

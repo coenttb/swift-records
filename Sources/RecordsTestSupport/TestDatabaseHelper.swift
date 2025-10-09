@@ -194,7 +194,7 @@ extension Database.Writer {
                 VALUES
                 (1, 1, '2001-01-01', false, false, 'Milk, Eggs, Apples', NULL, 1, 'Groceries', '2040-02-14 23:31:30'),
                 (2, NULL, '2000-12-30', false, true, '', NULL, 1, 'Haircut', '2040-02-14 23:31:30'),
-                (3, NULL, '2001-01-01', false, false, 'Ask about diet', 2, 1, 'Vet appointment', '2040-02-14 23:31:30'),
+                (3, NULL, '2001-01-01', false, false, 'Ask about diet', 3, 1, 'Vet appointment', '2040-02-14 23:31:30'),
                 (4, 2, '2001-01-02', true, false, '', 1, 2, 'Finish report', '2040-02-14 23:31:30'),
                 (5, NULL, '2001-01-03', false, true, 'Prepare slides', 1, 2, 'Team meeting', '2040-02-14 23:31:30'),
                 (6, 1, '2001-01-04', false, false, '', 2, 2, 'Review PR', '2040-02-14 23:31:30')
