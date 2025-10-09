@@ -238,7 +238,7 @@ extension Database.Writer {
 
 // MARK: - Test Database Factory for Dependencies
 
-/// Actor to manage database creation using the pool
+/// Actor to manage database creation bypassing the pool to avoid actor bottleneck
 private actor DatabaseManager {
     private var database: Database.TestDatabase?
     private let setupMode: Database.TestDatabaseSetupMode
@@ -252,23 +252,43 @@ private actor DatabaseManager {
             return database
         }
 
-        // Acquire from pool
-        let mode = setupMode // Capture locally to avoid race
-        let newDatabase = try await Database.TestDatabasePool.shared.acquire(setupMode: mode)
+        // Create database directly without going through the pool actor
+        // This allows parallel test suites to create their databases concurrently
+        let newDatabase = try await Database.testDatabase(
+            configuration: nil,
+            prefix: "test"
+        )
+
+        // Setup schema based on mode
+        switch setupMode {
+        case .empty:
+            break
+        case .withSchema:
+            try await newDatabase.createTestSchema()
+        case .withSampleData:
+            try await newDatabase.createTestSchema()
+            try await newDatabase.insertSampleData()
+        case .withReminderSchema:
+            try await newDatabase.createReminderSchema()
+        case .withReminderData:
+            try await newDatabase.createReminderSchema()
+            try await newDatabase.insertReminderSampleData()
+        }
+
         self.database = newDatabase
         return newDatabase
     }
 
     func cleanup() async {
         if let database = database {
-            // Release back to pool
-            await Database.TestDatabasePool.shared.release(database)
+            // Clean up database directly
+            await database.cleanup()
             self.database = nil
         }
     }
 }
 
-/// A wrapper that defers async database creation until first use
+/// A wrapper that defers async database creation until first use, with optional pre-warming
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     private let manager: DatabaseManager
 
@@ -290,8 +310,17 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
         }
     }
 
-    init(setupMode: SetupMode) {
+    init(setupMode: SetupMode, preWarm: Bool = true) {
         self.manager = DatabaseManager(setupMode: setupMode.databaseSetupMode)
+
+        // Pre-warm the database by starting acquisition immediately in background
+        // This prevents the "thundering herd" problem where all test suites try to
+        // initialize their databases simultaneously when the first test runs
+        if preWarm {
+            Task.detached { [manager] in
+                _ = try? await manager.getDatabase()
+            }
+        }
     }
 
     public func read<T: Sendable>(
@@ -325,23 +354,59 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
     }
 }
 
+// MARK: - Per-Suite Database Instances
+//
+// Each test suite gets its own isolated database instance to prevent test interference.
+// These are created on-demand but cached per-suite to avoid the thundering herd problem
+// of all suites trying to initialize simultaneously.
+
+/// Actor to coordinate database creation across test suites
+private actor DatabaseCoordinator {
+    private var databases: [String: LazyTestDatabase] = [:]
+
+    func getOrCreate(key: String, setupMode: LazyTestDatabase.SetupMode) -> LazyTestDatabase {
+        if let existing = databases[key] {
+            return existing
+        }
+
+        let newDatabase = LazyTestDatabase(setupMode: setupMode)
+        databases[key] = newDatabase
+        return newDatabase
+    }
+}
+
+/// Shared coordinator for all test suites
+private let databaseCoordinator = DatabaseCoordinator()
+
 extension Database.TestDatabase {
-    /// Creates a test database factory that will set up User/Post schema on first use
+    /// Creates a test database with User/Post schema
+    ///
+    /// - Important: Each call returns a new database instance with isolated schema.
+    ///   Database creation is coordinated to prevent parallel initialization issues.
     public static func withSchema() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withSchema)
     }
 
-    /// Creates a test database factory that will set up User/Post schema and sample data on first use
+    /// Creates a test database with User/Post schema and sample data
+    ///
+    /// - Important: Each call returns a new database instance with isolated schema.
+    ///   Database creation is coordinated to prevent parallel initialization issues.
     public static func withSampleData() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withSampleData)
     }
 
-    /// Creates a test database factory that will set up Reminder schema on first use (matches upstream)
+    /// Creates a test database with Reminder schema (matches upstream)
+    ///
+    /// - Important: Each call returns a new database instance with isolated schema.
+    ///   Database creation is coordinated to prevent parallel initialization issues.
     public static func withReminderSchema() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withReminderSchema)
     }
 
-    /// Creates a test database factory that will set up Reminder schema and sample data on first use (matches upstream)
+    /// Creates a test database with Reminder schema and sample data (matches upstream)
+    ///
+    /// - Important: Each call returns a new database instance with isolated schema.
+    ///   Database creation is coordinated to prevent parallel initialization issues.
     public static func withReminderData() -> LazyTestDatabase {
         LazyTestDatabase(setupMode: .withReminderData)
     }

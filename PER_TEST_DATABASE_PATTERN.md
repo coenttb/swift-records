@@ -1,7 +1,9 @@
-# Per-Test Database Pattern (FINAL SOLUTION)
+# Per-Test Database Pattern (SUPERSEDED)
 
 **Date**: 2025-10-08
-**Status**: ✅ Implemented - Ready for Testing
+**Status**: ⚠️ Superseded - See PARALLEL_TEST_DEBUGGING.md
+
+**Note**: This document describes an approach that was tried but did not solve the parallel execution hanging issue. While tests now pass individually and follow upstream patterns, cmd+U still hangs. See `PARALLEL_TEST_DEBUGGING.md` for comprehensive analysis.
 
 ## The Problem We Solved
 
