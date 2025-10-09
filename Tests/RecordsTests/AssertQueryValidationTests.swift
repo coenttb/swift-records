@@ -14,7 +14,7 @@ import Testing
 struct AssertQueryValidationTests {
   @Dependency(\.defaultDatabase) var db
 
-  @Test func simpleSelect() async {
+  @Test func simpleSelectWithExplicitExecute() async {
     await RecordsTestSupport.assertQuery(
       Reminder.select { $0.title }.order(by: \.title).limit(3),
       execute: { statement in
@@ -29,7 +29,30 @@ struct AssertQueryValidationTests {
         ORDER BY "reminders"."title"
         LIMIT 3
         """
-      },results: {
+      },
+      results: {
+        """
+        ┌─────────────────┐
+        │ "Finish report" │
+        │ "Groceries"     │
+        │ "Haircut"       │
+        └─────────────────┘
+        """
+      }
+    )
+  }
+
+  @Test func simpleSelectWithConvenienceWrapper() async {
+    await assertQuery(
+      Reminder.select { $0.title }.order(by: \.title).limit(3)
+    ) {
+      """
+      SELECT "reminders"."title"
+      FROM "reminders"
+      ORDER BY "reminders"."title"
+      LIMIT 3
+      """
+    } results: {
       """
       ┌─────────────────┐
       │ "Finish report" │
@@ -38,6 +61,5 @@ struct AssertQueryValidationTests {
       └─────────────────┘
       """
     }
-    )
   }
 }

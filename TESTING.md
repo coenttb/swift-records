@@ -1,6 +1,6 @@
 # Testing Guide
 
-**Last Updated**: 2025-10-08 (ResourcePool Integration)
+**Last Updated**: 2025-10-09 (assertQuery Implementation)
 **Status**: ✅ Production-Ready
 
 This document explains the testing architecture for swift-records.
@@ -17,6 +17,7 @@ This document explains the testing architecture for swift-records.
 3. [Evolution of Approaches](#evolution-of-approaches)
 4. [Final Solution](#final-solution)
 5. [Best Practices](#best-practices)
+6. [Snapshot Testing with assertQuery](#snapshot-testing-with-assertquery)
 
 ---
 
@@ -477,6 +478,389 @@ try await RemindersList.find(1).delete().execute(db)
 
 ---
 
+## Snapshot Testing with assertQuery
+
+**Status**: ✅ Production-Ready (2025-10-09)
+
+### Overview
+
+`assertQuery` is an end-to-end async snapshot testing helper for PostgreSQL statements. It enables comprehensive testing by capturing and verifying both:
+
+1. **SQL Generation** - The exact SQL produced by the query builder
+2. **Execution Results** - The data returned from PostgreSQL, formatted as ASCII tables
+
+This matches upstream's `sqlite-data` testing patterns but adapted for PostgreSQL's async execution model.
+
+### Architecture
+
+**Two-Layer Design**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Tests/RecordsTests/Support/AssertQuery.swift            │
+│ Convenience wrapper with auto-injected DB dependency    │
+└──────────────────────┬──────────────────────────────────┘
+                       │ calls
+┌──────────────────────▼──────────────────────────────────┐
+│ Sources/RecordsTestSupport/AssertQuery.swift            │
+│ Core implementation with explicit execute closure       │
+└──────────────────────┬──────────────────────────────────┘
+                       │ uses
+┌──────────────────────▼──────────────────────────────────┐
+│ InlineSnapshotTesting library                           │
+│ Handles snapshot recording, comparison, and updates     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Layer 1: RecordsTestSupport (Core)**
+- Generic, reusable implementation
+- Requires explicit `execute:` closure
+- Suitable for external packages
+- Database-agnostic design
+
+**Layer 2: Test Wrapper (Convenience)**
+- Auto-injects `@Dependency(\.defaultDatabase)`
+- Clean syntax matching upstream
+- Internal to swift-records tests
+- Opinionated for our test patterns
+
+### Basic Usage
+
+**Convenience Wrapper** (Recommended):
+
+```swift
+@Suite(
+  "My Tests",
+  .snapshots(record: .never),
+  .dependencies {
+    $0.envVars = .development
+    $0.defaultDatabase = try await Database.TestDatabase.withReminderData()
+  }
+)
+struct MyTests {
+  @Test func selectTitles() async {
+    await assertQuery(
+      Reminder.select { $0.title }.order(by: \.title).limit(3)
+    ) {
+      """
+      SELECT "reminders"."title"
+      FROM "reminders"
+      ORDER BY "reminders"."title"
+      LIMIT 3
+      """
+    } results: {
+      """
+      ┌─────────────────┐
+      │ "Finish report" │
+      │ "Groceries"     │
+      │ "Haircut"       │
+      └─────────────────┘
+      """
+    }
+  }
+}
+```
+
+**Explicit Execute** (Full Control):
+
+```swift
+@Test func selectWithExplicitExecute() async {
+  @Dependency(\.defaultDatabase) var db
+
+  await RecordsTestSupport.assertQuery(
+    Reminder.select { $0.title }.order(by: \.title).limit(3),
+    execute: { statement in
+      try await db.read { db in
+        try await db.fetchAll(statement)
+      }
+    },
+    sql: {
+      """
+      SELECT "reminders"."title"
+      FROM "reminders"
+      ORDER BY "reminders"."title"
+      LIMIT 3
+      """
+    },
+    results: {
+      """
+      ┌─────────────────┐
+      │ "Finish report" │
+      │ "Groceries"     │
+      │ "Haircut"       │
+      └─────────────────┘
+      """
+    }
+  )
+}
+```
+
+### Advanced Features
+
+#### Parameter Pack Support
+
+`assertQuery` handles complex tuple types using Swift's parameter pack feature:
+
+```swift
+// Multi-column SELECT with tuple results
+await assertQuery(
+  Reminder.find(1).select { ($0.id, $0.title, $0.isCompleted) }
+) {
+  """
+  SELECT "reminders"."id", "reminders"."title", "reminders"."isCompleted"
+  FROM "reminders"
+  WHERE ("reminders"."id") IN ((1))
+  """
+} results: {
+  """
+  ┌────┬──────────────┬───────┐
+  │ 1  │ "Groceries" │ false │
+  └────┴──────────────┴───────┘
+  """
+}
+```
+
+**Implementation**: Parameter pack overloads added to:
+- `Database.Connection.Protocol.fetchAll<each V: QueryRepresentable>(...)`
+- `Database.Connection.fetchAll<each V: QueryRepresentable>(...)`
+- `Statement.fetchAll<each V: QueryRepresentable>(...)`
+
+#### Swift 6 Concurrency
+
+All signatures include proper `Sendable` constraints:
+
+```swift
+func assertQuery<each V: QueryRepresentable, S: Statement<(repeat each V)>>(
+  _ query: S,
+  execute: @Sendable (S) async throws -> [(repeat (each V).QueryOutput)],
+  ...
+) async where
+  repeat each V: Sendable,
+  repeat (each V).QueryOutput: Sendable,
+  S: Sendable
+```
+
+This ensures:
+- ✅ Safe concurrent test execution
+- ✅ Actor boundary crossing
+- ✅ Database dependency capture in closures
+- ✅ Strict concurrency mode compliance
+
+### Snapshot Modes
+
+Control snapshot behavior with suite traits:
+
+```swift
+// Never record (default for CI)
+@Suite(.snapshots(record: .never))
+
+// Always record (update all snapshots)
+@Suite(.snapshots(record: .all))
+
+// Record only failed tests (development)
+@Suite(.snapshots(record: .failed))
+
+// Record missing snapshots
+@Suite(.snapshots(record: .missing))
+```
+
+### Implementation Details
+
+#### The fetchAll Overload Problem
+
+**Challenge**: Swift's type system cannot treat `(repeat each V)` as a single `QueryRepresentable` type because tuples don't conform to protocols.
+
+**Error Before Fix**:
+```swift
+// ❌ Type '(repeat each V)' cannot conform to 'QueryRepresentable'
+try await db.fetchAll(statement)
+```
+
+**Solution**: Add explicit parameter pack overloads:
+
+```swift
+// Original (single type)
+func fetchAll<QueryValue: QueryRepresentable>(
+    _ statement: some Statement<QueryValue>
+) async throws -> [QueryValue.QueryOutput]
+
+// New (parameter pack tuple)
+func fetchAll<each V: QueryRepresentable>(
+    _ statement: some Statement<(repeat each V)>
+) async throws -> [(repeat (each V).QueryOutput)]
+```
+
+This pattern mirrors `QueryDecoder.decodeColumns`:
+```swift
+// Single column
+func decodeColumns<T: QueryRepresentable>(_ type: T.Type) -> T.QueryOutput
+
+// Multiple columns (tuple)
+func decodeColumns<each T: QueryRepresentable>(
+    _ types: (repeat each T).Type
+) -> (repeat (each T).QueryOutput)
+```
+
+### Comparison to Upstream
+
+| Aspect | sqlite-data | swift-records | Notes |
+|--------|-------------|---------------|-------|
+| **Function Name** | `assertQuery` | `assertQuery` | ✅ Identical |
+| **Execution Model** | Synchronous | **Async** | PostgreSQL requirement |
+| **Execute Closure** | `throws` | `async throws` | Async/await |
+| **Database Injection** | `@Dependency(\.defaultDatabase)` | `@Dependency(\.defaultDatabase)` | ✅ Identical |
+| **Snapshot Library** | InlineSnapshotTesting | InlineSnapshotTesting | ✅ Same |
+| **ASCII Tables** | printTable | printTable | ✅ Same format |
+| **Parameter Packs** | Supported | Supported | ✅ Same |
+| **Result Type** | `[(repeat each V).QueryOutput)]` | `[(repeat each V).QueryOutput)]` | ✅ Identical |
+
+**Key Differences**:
+1. **Async execution**: `async throws` instead of `throws`
+2. **Database connection**: Uses actor-based `Database.Reader` instead of synchronous SQLite handle
+3. **Dependencies trait**: Uses `.dependencies { }` closure instead of `.dependency()` for async setup
+
+### Best Practices
+
+#### 1. Choose the Right Variant
+
+**Use Convenience Wrapper** (most tests):
+```swift
+await assertQuery(query) { sql } results: { data }
+```
+- ✅ Clean, readable syntax
+- ✅ Matches upstream pattern
+- ✅ Auto-injects database
+- ❌ Only for internal swift-records tests
+
+**Use Explicit Execute** when:
+- Testing external packages that depend on RecordsTestSupport
+- Need custom execution logic
+- Want explicit control over database access
+- Debugging query execution
+
+#### 2. Snapshot Recording Strategy
+
+**Development**:
+```swift
+@Suite(.snapshots(record: .failed))
+```
+- Records snapshots when tests fail
+- Useful for updating expected outputs
+- Good for iterative development
+
+**CI/Production**:
+```swift
+@Suite(.snapshots(record: .never))
+```
+- Enforces exact matches
+- Prevents accidental snapshot changes
+- Ensures reproducible tests
+
+#### 3. Test Organization
+
+Group related assertions in same test:
+
+```swift
+@Test func reminderOperations() async {
+  // Select
+  await assertQuery(Reminder.all) { ... } results: { ... }
+
+  // Filter
+  await assertQuery(Reminder.where { $0.isCompleted }) { ... } results: { ... }
+
+  // Order
+  await assertQuery(Reminder.order(by: \.title)) { ... } results: { ... }
+}
+```
+
+#### 4. Complex Queries
+
+For joins and complex selects:
+
+```swift
+await assertQuery(
+  Reminder
+    .join(RemindersList.self, on: { $0.remindersListID == $1.id })
+    .select { reminder, list in
+      (reminder.title, list.name)
+    }
+) {
+  """
+  SELECT "reminders"."title", "reminders_lists"."name"
+  FROM "reminders"
+  INNER JOIN "reminders_lists" ON "reminders"."remindersListID" = "reminders_lists"."id"
+  """
+} results: {
+  """
+  ┌──────────────┬────────┐
+  │ "Groceries" │ "Home" │
+  │ "Haircut"   │ "Home" │
+  └──────────────┴────────┘
+  """
+}
+```
+
+#### 5. Error Testing
+
+Capture and verify error messages:
+
+```swift
+await assertQuery(
+  User.where { $0.invalidColumn == "test" }
+) {
+  """
+  -- Expected SQL that would cause error
+  """
+} results: {
+  """
+  column "invalidColumn" does not exist
+  """
+}
+```
+
+### Troubleshooting
+
+#### Snapshot Mismatch
+
+**Symptom**: Test fails with diff showing expected vs actual
+
+**Common Causes**:
+1. **Data Changed**: Test database has different data than expected
+2. **SQL Changed**: Query builder generated different SQL
+3. **Whitespace**: Indentation or line ending differences
+
+**Solutions**:
+- Use `.snapshots(record: .failed)` to record new snapshot
+- Verify test database setup is correct
+- Check trailing whitespace in snapshot strings
+
+#### Type Inference Issues
+
+**Symptom**: Compiler can't infer parameter pack types
+
+**Solution**: Add explicit type annotation:
+
+```swift
+// ❌ Compiler confused
+await assertQuery(query) { ... }
+
+// ✅ Explicit type
+await assertQuery<String, Int>(query) { ... }
+```
+
+#### Sendable Errors
+
+**Symptom**: `Cannot convert non-Sendable type` errors
+
+**Cause**: Query types or closures crossing actor boundaries
+
+**Solution**: Ensure all types conform to Sendable:
+```swift
+extension MyType: Sendable {}
+```
+
+---
+
 ## Performance Characteristics
 
 ### Typical Test Run
@@ -618,5 +1002,8 @@ This architecture:
 - ✅ Matches real-world patterns
 - ✅ Provides clean test isolation
 - ✅ Delivers fast, reliable tests
+- ✅ Full snapshot testing with assertQuery
+- ✅ Parameter pack support for complex queries
+- ✅ Swift 6 strict concurrency compliant
 
-**Status**: ✅ Production-ready with 94 passing tests
+**Status**: ✅ Production-ready with comprehensive testing infrastructure
