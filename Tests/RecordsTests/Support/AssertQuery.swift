@@ -10,7 +10,9 @@ import StructuredQueriesPostgresCore
 /// ```swift
 /// @Suite(
 ///   "My Tests",
-///   .dependency(\.defaultDatabase, Database.TestDatabase.withReminderData())
+///   .dependencies {
+///     $0.defaultDatabase = try await Database.TestDatabase.withReminderData()
+///   }
 /// )
 /// struct MyTests {
 ///   @Test func findByID() async {
@@ -32,8 +34,8 @@ import StructuredQueriesPostgresCore
 ///   }
 /// }
 /// ```
-func assertQuery<each V: QueryRepresentable>(
-    _ query: some Statement<(repeat each V)>,
+func assertQuery<each V: QueryRepresentable, S: Statement<(repeat each V)>>(
+    _ query: S,
     sql: (() -> String)? = nil,
     results: (() -> String)? = nil,
     fileID: StaticString = #fileID,
@@ -41,13 +43,13 @@ func assertQuery<each V: QueryRepresentable>(
     function: StaticString = #function,
     line: UInt = #line,
     column: UInt = #column
-) async where repeat each V: Sendable, repeat (each V).QueryOutput: Sendable {
-    @Dependency(\.defaultDatabase) var db
-    
+) async where repeat each V: Sendable, repeat (each V).QueryOutput: Sendable, S: Sendable {
+    @Dependency(\.defaultDatabase) var database
+
     await RecordsTestSupport.assertQuery(
         query,
         execute: { statement in
-            try await db.read { db in
+            try await database.read { db in
                 try await db.fetchAll(statement)
             }
         },
