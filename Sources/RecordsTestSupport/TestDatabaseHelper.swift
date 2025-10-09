@@ -323,30 +323,12 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
         return db
     }
 
-    public enum SetupMode: Sendable {
-        case empty
-        case withSchema
-        case withSampleData
-        case withReminderSchema
-        case withReminderData
-
-        var databaseSetupMode: Database.TestDatabaseSetupMode {
-            switch self {
-            case .empty: return .empty
-            case .withSchema: return .withSchema
-            case .withSampleData: return .withSampleData
-            case .withReminderSchema: return .withReminderSchema
-            case .withReminderData: return .withReminderData
-            }
-        }
-    }
-
     /// Initialize a lazy test database (synchronous - no async needed!)
     ///
     /// - Parameters:
     ///   - setupMode: Schema and data setup mode
-    public init(setupMode: SetupMode) {
-        self.setupMode = setupMode.databaseSetupMode
+    public init(setupMode: Database.TestDatabaseSetupMode) {
+        self.setupMode = setupMode
     }
 
     public func read<T: Sendable>(

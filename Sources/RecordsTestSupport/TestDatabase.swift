@@ -7,21 +7,15 @@ extension Database {
     public final class TestDatabase: Writer, @unchecked Sendable {
         private let wrapped: any Writer
         private let schemaName: String
-        private let shouldCleanup: Bool
 
-        init(
-            wrapped: any Writer,
-            schemaName: String,
-            shouldCleanup: Bool = true
-        ) {
+        init(wrapped: any Writer, schemaName: String) {
             self.wrapped = wrapped
             self.schemaName = schemaName
-            self.shouldCleanup = shouldCleanup
         }
 
         deinit {
             // Schema will persist for process lifetime (acceptable for tests)
-            // Cleanup would cause hang due to ClientRunner deinit
+            // No cleanup to prevent hangs during process exit
         }
 
         public func read<T: Sendable>(
@@ -44,31 +38,9 @@ extension Database {
             }
         }
 
-        /// Clean up the test schema
-        public func cleanup() async {
-            guard shouldCleanup else {
-                return
-            }
-
-            do {
-                // Drop the schema first
-                try await wrapped.write { db in
-                    try await db.execute("DROP SCHEMA IF EXISTS \(schemaName) CASCADE")
-                }
-            } catch {
-                // Ignore cleanup errors
-            }
-
-            // Always try to close the connection, even if schema drop failed
-            do {
-                try await wrapped.close()
-            } catch {
-                // Ignore cleanup errors
-            }
-        }
-
         public func close() async throws {
-            await self.cleanup()
+            // No-op: Schemas persist for process lifetime (intentional for tests)
+            // Cleanup would cause hangs during process exit
         }
     }
 }
@@ -124,8 +96,7 @@ extension Database {
 
         return TestDatabase(
             wrapped: database,
-            schemaName: schemaName,
-            shouldCleanup: false
+            schemaName: schemaName
         )
     }
 
@@ -156,8 +127,7 @@ extension Database {
 
         return TestDatabase(
             wrapped: pool,
-            schemaName: schemaName,
-            shouldCleanup: false
+            schemaName: schemaName
         )
     }
 }
@@ -165,7 +135,9 @@ extension Database {
 // MARK: - Convenience
 
 extension Database {
-    /// Executes a block with a test database, automatically cleaning up afterward
+    /// Executes a block with a test database
+    ///
+    /// Note: Schema persists for process lifetime (acceptable for tests)
     public static func withTestDatabase<T>(
         configuration: PostgresClient.Configuration? = nil,
         prefix: String = "test",
@@ -175,14 +147,6 @@ extension Database {
             configuration: configuration,
             prefix: prefix
         )
-
-        do {
-            let result = try await block(database)
-            await database.cleanup()
-            return result
-        } catch {
-            await database.cleanup()
-            throw error
-        }
+        return try await block(database)
     }
 }
