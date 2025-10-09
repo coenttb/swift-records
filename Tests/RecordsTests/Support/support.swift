@@ -24,5 +24,3 @@ extension URL {
 extension EnvironmentVariables {
     static let development: Self = try! .live(environmentConfiguration: .projectRoot(.projectRoot, environment: "development"))
 }
-
-@MainActor @Suite(.serialized, .snapshots(record: .failed)) struct SnapshotTests {}

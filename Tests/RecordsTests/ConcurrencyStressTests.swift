@@ -6,7 +6,7 @@ import Testing
 
 @Suite(
     "Concurrency Stress Tests",
-//    .disabled(),   Disabled by default - enable for manual stress testing
+    .disabled(),   // Disabled by default - enable for manual stress testing
     .serialized,  // Run serially to avoid overwhelming other test suites
     .dependencies {
         $0.envVars = .development
