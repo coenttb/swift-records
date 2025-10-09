@@ -6,16 +6,16 @@ import Testing
 
 @Suite(
     "Concurrency Stress Tests",
-    .disabled(),
-    .serialized,
+//    .disabled(),   Disabled by default - enable for manual stress testing
+    .serialized,  // Run serially to avoid overwhelming other test suites
     .dependencies {
         $0.envVars = .development
         // Use connection pool for proper concurrency testing
-        // Reduced from 10/50 to 5/20 to prevent connection exhaustion when running all test suites
+        // Reduced to 2/10 (matches new defaults) to prevent connection exhaustion
         $0.defaultDatabase = try await Database.TestDatabase.withConnectionPool(
             setupMode: .withReminderData,
-            minConnections: 5,
-            maxConnections: 20
+            minConnections: 2,
+            maxConnections: 10
         )
     }
 )
@@ -146,8 +146,8 @@ struct ConcurrencyStressTests {
         }
         let actualInserted = countAfter - countBefore
 
-        // With proper connection pool (50 max connections), all 500 should succeed
-        // They queue and wait for available connections
+        // With proper connection pool (10 max connections), all 500 should succeed
+        // They queue and wait for available connections (extensive queuing expected with 10 max)
         #expect(successes == count, "Expected all \(count) operations to succeed, but only \(successes) succeeded")
         #expect(actualInserted == count, "Expected \(count) records inserted, but got \(actualInserted)")
 

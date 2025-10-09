@@ -441,16 +441,17 @@ extension Database.TestDatabase {
     ///
     /// - Parameters:
     ///   - setupMode: Schema and data setup mode
-    ///   - minConnections: Minimum connections in pool (default: 5, reduced from 10)
-    ///   - maxConnections: Maximum connections in pool (default: 20, reduced from 50)
+    ///   - minConnections: Minimum connections in pool (default: 2, aggressively reduced for cmd+U)
+    ///   - maxConnections: Maximum connections in pool (default: 10, aggressively reduced for cmd+U)
     /// - Returns: A lazy test database with connection pooling enabled
     public static func withConnectionPool(
         setupMode: LazyTestDatabase.SetupMode,
-        minConnections: Int = 5,
-        maxConnections: Int = 20
+        minConnections: Int = 2,
+        maxConnections: Int = 10
     ) async throws -> LazyTestDatabase {
         // Use LazyTestDatabase with connection pool config
-        // Reduced connection limits to prevent PostgreSQL exhaustion when running many test suites
+        // Aggressively reduced connection limits to prevent PostgreSQL exhaustion when running all test suites
+        // With 13 test suites × 10 max connections = 130 connections (well within PostgreSQL's 400 default limit)
         try await LazyTestDatabase(
             setupMode: setupMode,
             capacity: 1,  // Only need 1 database (it has connection pool internally)
