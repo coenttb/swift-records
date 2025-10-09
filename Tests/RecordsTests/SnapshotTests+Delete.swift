@@ -20,7 +20,7 @@ extension SnapshotTests {
         """
         DELETE FROM "reminders"
         WHERE ("reminders"."id" = 1)
-        RETURNING "id"
+        RETURNING "reminders"."id"
         """
       } results: {
         """
@@ -46,20 +46,20 @@ extension SnapshotTests {
         """
       } results: {
         """
-        ┌──────────────────────────────────────────────┐
-        │ Reminder(                                    │
-        │   id: 1,                                     │
-        │   assignedUserID: 1,                         │
-        │   dueDate: Date(2001-01-01T00:00:00.000Z),   │
-        │   isCompleted: false,                        │
-        │   isFlagged: false,                          │
-        │   notes: "Buy milk and eggs",                │
-        │   priority: nil,                             │
-        │   remindersListID: 1,                        │
-        │   title: "Groceries",                        │
-        │   updatedAt: Date(2040-02-14T23:31:30.000Z)  │
-        │ )                                            │
-        └──────────────────────────────────────────────┘
+        ┌─────────────────────────────────────────────┐
+        │ Reminder(                                   │
+        │   id: 1,                                    │
+        │   assignedUserID: 1,                        │
+        │   dueDate: Date(2001-01-01T00:00:00.000Z),  │
+        │   isCompleted: false,                       │
+        │   isFlagged: false,                         │
+        │   notes: "Milk, Eggs, Apples",              │
+        │   priority: nil,                            │
+        │   remindersListID: 1,                       │
+        │   title: "Groceries",                       │
+        │   updatedAt: Date(2040-02-14T23:31:30.000Z) │
+        │ )                                           │
+        └─────────────────────────────────────────────┘
         """
       }
     }
@@ -75,7 +75,7 @@ extension SnapshotTests {
         """
         DELETE FROM "reminders"
         WHERE ((("reminders"."id" = 4) AND "reminders"."isCompleted") AND ("reminders"."priority" = 1))
-        RETURNING "id"
+        RETURNING "reminders"."id"
         """
       } results: {
         """
@@ -94,7 +94,7 @@ extension SnapshotTests {
         """
         DELETE FROM "reminders"
         WHERE ("reminders"."id" IN (2))
-        RETURNING "id"
+        RETURNING "reminders"."id"
         """
       } results: {
         """
@@ -113,7 +113,7 @@ extension SnapshotTests {
         """
         DELETE FROM "reminders"
         WHERE ("reminders"."id" IN (5, 6))
-        RETURNING "id"
+        RETURNING "reminders"."id"
         """
       } results: {
         """

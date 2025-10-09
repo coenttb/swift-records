@@ -74,20 +74,20 @@ extension SnapshotTests {
         """
       } results: {
         """
-        ┌──────────────────────────────────────────────┐
-        │ Reminder(                                    │
-        │   id: 1,                                     │
-        │   assignedUserID: 1,                         │
-        │   dueDate: Date(2001-01-01T00:00:00.000Z),   │
-        │   isCompleted: true,                         │
-        │   isFlagged: false,                          │
-        │   notes: "Buy milk and eggs",                │
-        │   priority: nil,                             │
-        │   remindersListID: 1,                        │
-        │   title: "Groceries",                        │
-        │   updatedAt: Date(2040-02-14T23:31:30.000Z)  │
-        │ )                                            │
-        └──────────────────────────────────────────────┘
+        ┌─────────────────────────────────────────────┐
+        │ Reminder(                                   │
+        │   id: 1,                                    │
+        │   assignedUserID: 1,                        │
+        │   dueDate: Date(2001-01-01T00:00:00.000Z),  │
+        │   isCompleted: true,                        │
+        │   isFlagged: false,                         │
+        │   notes: "Milk, Eggs, Apples",              │
+        │   priority: nil,                            │
+        │   remindersListID: 1,                       │
+        │   title: "Groceries",                       │
+        │   updatedAt: Date(2040-02-14T23:31:30.000Z) │
+        │ )                                           │
+        └─────────────────────────────────────────────┘
         """
       }
     }

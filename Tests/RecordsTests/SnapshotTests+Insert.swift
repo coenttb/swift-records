@@ -88,20 +88,20 @@ extension SnapshotTests {
         """
       } results: {
         """
-        ┌──────────────────────────────────────────────┐
-        │ Reminder(                                    │
-        │   id: 7,                                     │
-        │   assignedUserID: nil,                       │
-        │   dueDate: nil,                              │
-        │   isCompleted: false,                        │
-        │   isFlagged: true,                           │
-        │   notes: "Test notes",                       │
-        │   priority: Priority.high,                   │
-        │   remindersListID: 1,                        │
-        │   title: "Important task",                   │
-        │   updatedAt: Date(2040-02-14T23:31:30.000Z)  │
-        │ )                                            │
-        └──────────────────────────────────────────────┘
+        ┌─────────────────────────────────────────────┐
+        │ Reminder(                                   │
+        │   id: 7,                                    │
+        │   assignedUserID: nil,                      │
+        │   dueDate: nil,                             │
+        │   isCompleted: false,                       │
+        │   isFlagged: true,                          │
+        │   notes: "Test notes",                      │
+        │   priority: .high,                          │
+        │   remindersListID: 1,                       │
+        │   title: "Important task",                  │
+        │   updatedAt: Date(2040-02-15T00:31:30.000Z) │
+        │ )                                           │
+        └─────────────────────────────────────────────┘
         """
       }
     }
