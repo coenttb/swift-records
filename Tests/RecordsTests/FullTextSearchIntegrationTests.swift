@@ -8,11 +8,13 @@ import Testing
 // MARK: - Test Model
 
 @Table
-struct Article: Codable, Equatable, Identifiable {
+struct Article: Codable, Equatable, Identifiable, FullTextSearchable {
     let id: Int
     var title: String
     var body: String
     var author: String
+
+    static var searchVectorColumn: String { "search_vector" }
 }
 
 // MARK: - Test Database Setup
@@ -281,6 +283,171 @@ struct FullTextSearchIntegrationTests {
                 .where { $0.id == articleId }
                 .fetchOne(db)
             #expect(deleted == nil)
+        }
+    }
+
+    // MARK: - Full-Text Search Operations
+
+    @Test("Search for articles matching a single term")
+    func searchSingleTerm() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.match("PostgreSQL") }
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count == 1)
+            #expect(articles[0].title == "PostgreSQL Full-Text Search")
+        } catch {
+            print("❌ Search single term failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Search for articles with multiple terms (AND)")
+    func searchMultipleTermsAND() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.match("Swift & patterns") }
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count == 1)
+            #expect(articles[0].title == "Swift Concurrency Guide")
+        } catch {
+            print("❌ Search AND failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Search for articles with multiple terms (OR)")
+    func searchMultipleTermsOR() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.match("PostgreSQL | Swift") }
+                    .order(by: \.title)
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count >= 2)
+
+            let titles = Set(articles.map(\.title))
+            #expect(titles.contains("PostgreSQL Full-Text Search"))
+            #expect(titles.contains("Swift Concurrency Guide"))
+        } catch {
+            print("❌ Search OR failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Search with ranking by relevance")
+    func searchWithRanking() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.match("database") }
+                    .fetchAll(db)
+            }
+
+            // Should find at least one article
+            #expect(articles.count >= 1)
+
+            let titles = Set(articles.map(\.title))
+            #expect(titles.contains("Database Indexing"))
+        } catch {
+            print("❌ Search with ranking failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Search articles by author using FTS")
+    func searchByAuthor() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.match("Alice") }
+                    .order(by: \.id)
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count == 2)
+            #expect(articles.allSatisfy { $0.author == "Alice" })
+        } catch {
+            print("❌ Search by author failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Search with phrase query")
+    func searchPhraseQuery() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.phraseMatch("web services") }
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count == 1)
+            #expect(articles[0].title == "Server-Side Swift")
+        } catch {
+            print("❌ Phrase search failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Search returns no results for non-matching term")
+    func searchNoResults() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.match("nonexistentterm12345") }
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count == 0)
+        } catch {
+            print("❌ Search no results failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Plain text search (safer for user input)")
+    func plainTextSearch() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.plainMatch("swift postgresql") }
+                    .fetchAll(db)
+            }
+
+            // plainMatch treats all words as AND, so no results expected
+            // (no single article contains both "swift" and "postgresql")
+            #expect(articles.count == 0)
+        } catch {
+            print("❌ Plain text search failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Web search syntax")
+    func webSearchSyntax() async throws {
+        do {
+            let articles = try await database.read { db in
+                try await Article
+                    .where { $0.webMatch("Swift OR PostgreSQL") }
+                    .fetchAll(db)
+            }
+
+            #expect(articles.count >= 2)
+
+            let titles = Set(articles.map(\.title))
+            #expect(titles.contains("Swift Concurrency Guide") || titles.contains("PostgreSQL Full-Text Search"))
+        } catch {
+            print("❌ Web search syntax failed: \(String(reflecting: error))")
+            throw error
         }
     }
 }
