@@ -45,6 +45,32 @@ extension Statement {
         try await db.fetchAll(self)
     }
 
+    /// Parameter pack overload for fetching tuples of QueryRepresentable types.
+    ///
+    /// This overload explicitly handles statements with parameter pack tuple types,
+    /// allowing type-safe execution of multi-column SELECT queries.
+    ///
+    /// For example:
+    ///
+    /// ```swift
+    /// let data = try await database.read { db in
+    ///   try Player
+    ///     .select { ($0.name, $0.score) }
+    ///     .fetchAll(db)
+    ///   // Returns [(String, Int)]
+    /// }
+    /// ```
+    ///
+    /// - Parameter db: A database connection.
+    /// - Returns: An array of tuples matching the statement's column types.
+    @inlinable
+    public func fetchAll<each V: QueryRepresentable>(
+        _ db: any Database.Connection.`Protocol`
+    ) async throws -> [(repeat (each V).QueryOutput)]
+    where QueryValue == (repeat each V) {
+        try await db.fetchAll(self)
+    }
+
     /// Returns a single value fetched from the database.
     ///
     /// For example:

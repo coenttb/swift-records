@@ -86,6 +86,16 @@ extension Database.Connection {
             _ statement: some Statement<QueryValue>
         ) async throws -> [QueryValue.QueryOutput]
 
+        /// Parameter pack overload for fetching tuples of QueryRepresentable types.
+        ///
+        /// This overload explicitly handles statements with parameter pack tuple types.
+        ///
+        /// - Parameter statement: A statement with a tuple QueryValue type.
+        /// - Returns: An array of tuples matching the statement's column types.
+        func fetchAll<each V: QueryRepresentable>(
+            _ statement: some Statement<(repeat each V)>
+        ) async throws -> [(repeat (each V).QueryOutput)]
+
         /// Fetches a single result from a statement.
         ///
         /// Returns the first matching record or nil if no records match.
