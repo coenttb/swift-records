@@ -6,8 +6,10 @@ import Testing
 
 @Suite(
     "Statement Extensions New",
-    .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = try await Database.TestDatabase.withSchema()
+    }
 )
 struct StatementExtensionTestsNew {
     @Dependency(\.defaultDatabase) var database

@@ -8,8 +8,10 @@ import Testing
 
 @Suite(
     "Trigger Tests",
-    .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSchema())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = try await Database.TestDatabase.withSchema()
+    }
 )
 struct TriggerTests {
     @Dependency(\.defaultDatabase) var db

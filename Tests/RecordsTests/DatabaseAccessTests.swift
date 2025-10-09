@@ -6,8 +6,10 @@ import Testing
 
 @Suite(
     "Database Access Patterns",
-    .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSampleData())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = try await Database.TestDatabase.withSampleData()
+    }
 )
 struct DatabaseAccessTests {
     @Dependency(\.defaultDatabase) var database

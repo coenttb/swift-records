@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "swift-records",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v14)
     ],
     products: [
         .library(
@@ -24,10 +24,11 @@ let package = Package(
             traits: ["StructuredQueriesPostgresTagged"]
         ),
         .package(url: "https://github.com/vapor/postgres-nio", from: "1.21.0"),
-        .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.9.0"),
+        .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.10.0"),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.6"),
         .package(url: "https://github.com/coenttb/swift-environment-variables", from: "0.0.1"),
         .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.5.0"),
+        .package(url: "https://github.com/coenttb/swift-resource-pool", from: "0.1.0"),
     ],
     targets: [
         .target(
@@ -48,7 +49,8 @@ let package = Package(
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
                 .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),
-                .product(name: "StructuredQueriesPostgresTestSupport", package: "swift-structured-queries-postgres")
+                .product(name: "StructuredQueriesPostgresTestSupport", package: "swift-structured-queries-postgres"),
+                .product(name: "ResourcePool", package: "swift-resource-pool")
             ]
         ),
         .testTarget(

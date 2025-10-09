@@ -20,8 +20,10 @@ struct DraftTestRecord: Codable, Equatable, Identifiable, Sendable {
 
 @Suite(
     "Draft Insert Tests",
-    .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSampleData())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = try await Database.TestDatabase.withSampleData()
+    }
 )
 struct DraftInsertTests {
     @Dependency(\.defaultDatabase) var database

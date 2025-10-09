@@ -73,6 +73,24 @@ extension Database {
     }
 }
 
+// MARK: - Setup Mode
+
+extension Database {
+    /// Setup mode for test databases
+    public enum TestDatabaseSetupMode: Sendable {
+        /// Empty database (no tables)
+        case empty
+        /// User/Post schema (swift-records-specific tests)
+        case withSchema
+        /// User/Post schema with sample data
+        case withSampleData
+        /// Reminder schema (matches upstream swift-structured-queries)
+        case withReminderSchema
+        /// Reminder schema with sample data
+        case withReminderData
+    }
+}
+
 // MARK: - Factory Methods
 
 extension Database {

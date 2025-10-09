@@ -1,6 +1,9 @@
 import Dependencies
 import Foundation
 @testable import Records
+import ResourcePool
+import struct ResourcePool.Statistics
+import struct ResourcePool.Metrics
 import StructuredQueriesPostgres
 import Testing
 
@@ -238,61 +241,18 @@ extension Database.Writer {
 
 // MARK: - Test Database Factory for Dependencies
 
-/// Actor to manage database creation bypassing the pool to avoid actor bottleneck
-private actor DatabaseManager {
-    private var database: Database.TestDatabase?
-    private let setupMode: Database.TestDatabaseSetupMode
-
-    init(setupMode: Database.TestDatabaseSetupMode) {
-        self.setupMode = setupMode
-    }
-
-    func getDatabase() async throws -> Database.TestDatabase {
-        if let database = database {
-            return database
-        }
-
-        // Create database directly without going through the pool actor
-        // This allows parallel test suites to create their databases concurrently
-        let newDatabase = try await Database.testDatabase(
-            configuration: nil,
-            prefix: "test"
-        )
-
-        // Setup schema based on mode
-        switch setupMode {
-        case .empty:
-            break
-        case .withSchema:
-            try await newDatabase.createTestSchema()
-        case .withSampleData:
-            try await newDatabase.createTestSchema()
-            try await newDatabase.insertSampleData()
-        case .withReminderSchema:
-            try await newDatabase.createReminderSchema()
-        case .withReminderData:
-            try await newDatabase.createReminderSchema()
-            try await newDatabase.insertReminderSampleData()
-        }
-
-        self.database = newDatabase
-        return newDatabase
-    }
-
-    func cleanup() async {
-        if let database = database {
-            // Clean up database directly
-            await database.cleanup()
-            self.database = nil
-        }
-    }
-}
-
-/// A wrapper that defers async database creation until first use, with optional pre-warming
+/// A wrapper that provides test databases via ResourcePool
+///
+/// This replaces the previous DatabaseManager approach with ResourcePool for:
+/// - Better thundering herd prevention (direct handoff vs broadcast)
+/// - FIFO fairness guarantees (tests served in arrival order)
+/// - Comprehensive metrics (wait times, handoff rates, utilization)
+/// - Sophisticated pre-warming (synchronous first resource + background remainder)
+/// - Resource validation and cycling capabilities
 public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
-    private let manager: DatabaseManager
+    private let pool: ResourcePool<Database.TestDatabase>
 
-    enum SetupMode {
+    public enum SetupMode {
         case empty
         case withSchema
         case withSampleData
@@ -310,104 +270,132 @@ public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
         }
     }
 
-    init(setupMode: SetupMode, preWarm: Bool = true) {
-        self.manager = DatabaseManager(setupMode: setupMode.databaseSetupMode)
-
-        // Pre-warm the database by starting acquisition immediately in background
-        // This prevents the "thundering herd" problem where all test suites try to
-        // initialize their databases simultaneously when the first test runs
-        if preWarm {
-            Task.detached { [manager] in
-                _ = try? await manager.getDatabase()
-            }
-        }
+    /// Initialize a test database pool
+    ///
+    /// - Parameters:
+    ///   - setupMode: Schema and data setup mode
+    ///   - capacity: Maximum number of databases in pool (default 1 for suite-level usage)
+    ///   - warmup: Whether to pre-create resources (default true)
+    ///   - timeout: Default timeout for resource acquisition (default 30s)
+    public init(
+        setupMode: SetupMode,
+        capacity: Int = 1,
+        warmup: Bool = true,
+        timeout: Duration = .seconds(30)
+    ) async throws {
+        self.pool = try await ResourcePool(
+            capacity: capacity,
+            resourceConfig: Database.TestDatabase.Config(
+                setupMode: setupMode.databaseSetupMode,
+                configuration: nil,
+                prefix: "test"
+            ),
+            warmup: warmup
+        )
     }
 
     public func read<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        let database = try await manager.getDatabase()
-        return try await database.read(block)
+        try await pool.withResource(timeout: .seconds(30)) { database in
+            try await database.read(block)
+        }
     }
 
     public func write<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        let database = try await manager.getDatabase()
-        return try await database.write(block)
+        try await pool.withResource(timeout: .seconds(30)) { database in
+            try await database.write(block)
+        }
     }
 
     public func close() async throws {
-//        await manager.cleanup()
+        try await pool.drain(timeout: .seconds(30))
+        await pool.close()
     }
 
-    deinit {
-        // Schedule cleanup to return database to pool
-        // Note: Task.detached is used here intentionally:
-        // 1. We can't use async in deinit
-        // 2. We explicitly capture only [manager], not self
-        // 3. The manager actor owns the database reference and needs to clean it up
-        // 4. This is safe because manager is an actor with its own lifecycle
-        Task.detached { [manager] in
-            await manager.cleanup()
+    /// Get pool statistics for debugging
+    public var statistics: Statistics {
+        get async {
+            await pool.statistics
+        }
+    }
+
+    /// Get pool metrics for observability
+    public var metrics: Metrics {
+        get async {
+            await pool.metrics
         }
     }
 }
 
-// MARK: - Per-Suite Database Instances
-//
-// Each test suite gets its own isolated database instance to prevent test interference.
-// These are created on-demand but cached per-suite to avoid the thundering herd problem
-// of all suites trying to initialize simultaneously.
-
-/// Actor to coordinate database creation across test suites
-private actor DatabaseCoordinator {
-    private var databases: [String: LazyTestDatabase] = [:]
-
-    func getOrCreate(key: String, setupMode: LazyTestDatabase.SetupMode) -> LazyTestDatabase {
-        if let existing = databases[key] {
-            return existing
-        }
-
-        let newDatabase = LazyTestDatabase(setupMode: setupMode)
-        databases[key] = newDatabase
-        return newDatabase
-    }
-}
-
-/// Shared coordinator for all test suites
-private let databaseCoordinator = DatabaseCoordinator()
+// MARK: - Convenience Factory Methods
 
 extension Database.TestDatabase {
     /// Creates a test database with User/Post schema
     ///
-    /// - Important: Each call returns a new database instance with isolated schema.
-    ///   Database creation is coordinated to prevent parallel initialization issues.
-    public static func withSchema() -> LazyTestDatabase {
-        LazyTestDatabase(setupMode: .withSchema)
+    /// Uses ResourcePool with capacity=1 (suite-level single database).
+    /// For parallel test execution within a suite, increase capacity.
+    public static func withSchema() async throws -> LazyTestDatabase {
+        try await LazyTestDatabase(
+            setupMode: .withSchema,
+            capacity: 1,
+            warmup: true
+        )
     }
 
     /// Creates a test database with User/Post schema and sample data
     ///
-    /// - Important: Each call returns a new database instance with isolated schema.
-    ///   Database creation is coordinated to prevent parallel initialization issues.
-    public static func withSampleData() -> LazyTestDatabase {
-        LazyTestDatabase(setupMode: .withSampleData)
+    /// Uses ResourcePool with capacity=1 (suite-level single database).
+    /// For parallel test execution within a suite, increase capacity.
+    public static func withSampleData() async throws -> LazyTestDatabase {
+        try await LazyTestDatabase(
+            setupMode: .withSampleData,
+            capacity: 1,
+            warmup: true
+        )
     }
 
     /// Creates a test database with Reminder schema (matches upstream)
     ///
-    /// - Important: Each call returns a new database instance with isolated schema.
-    ///   Database creation is coordinated to prevent parallel initialization issues.
-    public static func withReminderSchema() -> LazyTestDatabase {
-        LazyTestDatabase(setupMode: .withReminderSchema)
+    /// Uses ResourcePool with capacity=1 (suite-level single database).
+    /// For parallel test execution within a suite, increase capacity.
+    public static func withReminderSchema() async throws -> LazyTestDatabase {
+        try await LazyTestDatabase(
+            setupMode: .withReminderSchema,
+            capacity: 1,
+            warmup: true
+        )
     }
 
     /// Creates a test database with Reminder schema and sample data (matches upstream)
     ///
-    /// - Important: Each call returns a new database instance with isolated schema.
-    ///   Database creation is coordinated to prevent parallel initialization issues.
-    public static func withReminderData() -> LazyTestDatabase {
-        LazyTestDatabase(setupMode: .withReminderData)
+    /// Uses ResourcePool with capacity=1 (suite-level single database).
+    /// For parallel test execution within a suite, increase capacity.
+    public static func withReminderData() async throws -> LazyTestDatabase {
+        try await LazyTestDatabase(
+            setupMode: .withReminderData,
+            capacity: 1,
+            warmup: true
+        )
+    }
+
+    /// Creates a pooled test database for parallel test execution
+    ///
+    /// Use this for test suites with many parallel tests.
+    ///
+    /// - Parameters:
+    ///   - setupMode: Schema and data setup mode
+    ///   - capacity: Number of databases in pool (recommended: 3-5 for parallel tests)
+    public static func withPooled(
+        setupMode: LazyTestDatabase.SetupMode,
+        capacity: Int = 5
+    ) async throws -> LazyTestDatabase {
+        try await LazyTestDatabase(
+            setupMode: setupMode,
+            capacity: capacity,
+            warmup: true
+        )
     }
 }

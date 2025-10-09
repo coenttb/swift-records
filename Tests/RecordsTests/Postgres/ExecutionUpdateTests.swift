@@ -5,8 +5,10 @@ import Testing
 
 @Suite(
     "UPDATE Execution Tests",
-    .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withReminderData())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = try await Database.TestDatabase.withReminderData()
+    }
 )
 struct ExecutionUpdateTests {
     @Dependency(\.defaultDatabase) var db

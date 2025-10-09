@@ -7,8 +7,10 @@ import Testing
 
 @Suite(
     "PostgresJSONB Tests",
-    .dependency(\.envVars, .development),
-    .dependency(\.defaultDatabase, Database.TestDatabase.withSampleData())
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = try await Database.TestDatabase.withSampleData()
+    }
 )
 struct PostgresJSONBTests {
 
