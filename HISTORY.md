@@ -365,3 +365,115 @@ let retrievedComponents = calendar.dateComponents([.year, .month, .day], from: d
 **Status**: ✅ READY FOR PRODUCTION
 
 The swift-records package now provides a solid foundation for PostgreSQL database operations with comprehensive test coverage and clean architecture.
+
+---
+
+## 2025-10-08: ResourcePool Integration
+
+### Problem
+
+LazyTestDatabase used simple DatabaseManager actor, causing:
+- Thundering herd issues during parallel suite initialization
+- Actor serialization bottleneck
+- No metrics or observability
+
+### Solution
+
+Integrated swift-resource-pool for professional-grade resource pooling:
+- FIFO fairness with direct handoff (eliminates thundering herd)
+- Comprehensive metrics (wait times, handoff rates, utilization)
+- Sophisticated pre-warming (synchronous first + background remainder)
+- Resource validation and cycling capabilities
+
+### Implementation Details
+
+**Added PoolableResource conformance to Database.TestDatabase**:
+```swift
+extension Database.TestDatabase: PoolableResource {
+    public func isStillValid() async -> Bool {
+        // Check connection is alive
+    }
+
+    public func shutdown() async {
+        // Clean up database resources
+    }
+}
+```
+
+**Replaced DatabaseManager with ResourcePool**:
+```swift
+let pool = try await ResourcePool<Database.TestDatabase>(
+    minimumResourceCount: minimumResourceCount,
+    maximumResourceCount: maximumResourceCount
+) {
+    try await Database.testDatabase(setupMode: setupMode)
+}
+```
+
+**Migrated all test suites to async factory methods**:
+```swift
+@Suite(
+    "My Tests",
+    .dependency(\.defaultDatabase, Database.TestDatabase.withReminderData())
+)
+```
+
+**Added TestMetrics.swift for observability**:
+- Resource requests tracking
+- Wait time monitoring
+- Pool utilization metrics
+- Handoff statistics
+
+### Results
+
+- ✅ All tests passing with cmd+U
+- ✅ True parallel execution
+- ✅ No actor bottleneck
+- ✅ Comprehensive metrics available
+
+### Files Modified
+
+- **Package.swift** - Added swift-resource-pool dependency, macOS 14.0 platform
+- **TestDatabase+PoolableResource.swift** (NEW) - PoolableResource conformance
+- **TestDatabaseHelper.swift** - ResourcePool integration
+- **TestMetrics.swift** (NEW) - Observability infrastructure
+- **TestDatabase.swift** - Moved TestDatabaseSetupMode enum
+- **All 11 test files** - Updated to async .dependencies pattern
+
+### Key Fixes During Integration
+
+1. **MemberImportVisibility handling** - Required explicit imports for ResourcePool
+2. **Async dependencies pattern** - Updated to `.dependencies { }` for async support
+3. **Swift-dependencies 1.10.0** - Needed for async trait support
+
+---
+
+## 2025-10-09: Documentation Consolidation
+
+### Motivation
+
+Consolidated scattered documentation into 3-file architecture for better maintainability and clarity.
+
+### Changes
+
+**Created**:
+- **ARCHITECTURE.md** - Living reference for database operations architecture
+- **TESTING.md** - Living guide for testing patterns (moved from docs/TESTING_ARCHITECTURE.md)
+- **HISTORY.md** - This file, append-only chronicle (moved from docs/DEVELOPMENT_HISTORY.md)
+
+**Preserved**:
+- **docs/archive/** - Historical artifacts unchanged
+
+### Benefits
+
+- ✅ Easy to find current architecture (ARCHITECTURE.md)
+- ✅ Easy to find testing patterns (TESTING.md)
+- ✅ Historical context preserved (HISTORY.md)
+- ✅ Clear separation of concerns
+- ✅ Better maintainability
+
+---
+
+## Future Entries
+
+(Append new dated sections here as significant changes occur)

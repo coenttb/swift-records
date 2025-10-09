@@ -1,9 +1,12 @@
-# Testing Architecture
+# Testing Guide
 
-**Last Updated**: 2025-10-08
+**Last Updated**: 2025-10-08 (ResourcePool Integration)
 **Status**: ✅ Production-Ready
 
-This document explains the testing architecture for swift-records, including upstream patterns, approaches tried, and the final solution that enables parallel test execution.
+This document explains the testing architecture for swift-records.
+
+**For architectural details**, see ARCHITECTURE.md.
+**For historical context on how we arrived at this solution**, see HISTORY.md.
 
 ---
 
