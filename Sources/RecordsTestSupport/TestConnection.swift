@@ -1,56 +1,112 @@
 import Foundation
 import Logging
 import NIOCore
+import NIOPosix
 import PostgresNIO
 @testable import Records
 
-/// A simple test database connection without background tasks
+/// Global EventLoopGroup for all test clients
+/// Following PostgresNIO's pattern: one shared EventLoopGroup, shutdown in teardown
+private let testEventLoopGroup = MultiThreadedEventLoopGroup.singleton
+
+/// Global task manager for test client lifecycle
+private actor TestClientManager {
+    private var clients: [(PostgresClient, Task<Void, Never>)] = []
+
+    func register(client: PostgresClient, runTask: Task<Void, Never>) {
+        clients.append((client, runTask))
+    }
+
+    func shutdownAll() async {
+        // Cancel all run tasks
+        for (_, task) in clients {
+            task.cancel()
+        }
+
+        // Wait for cancellation to complete
+        for (_, task) in clients {
+            await task.value
+        }
+
+        // Shutdown the EventLoopGroup - THIS IS THE KEY from PostgresNIO tests!
+        try? await testEventLoopGroup.shutdownGracefully()
+
+        clients.removeAll()
+    }
+}
+
+private let testClientManager = TestClientManager()
+
+/// Register shutdown handler on first use
+private nonisolated(unsafe) var shutdownHandlerRegistered = false
+
+/// Test database connection using PostgresClient with structured concurrency
 ///
-/// Unlike ClientRunner which uses PostgresClient with an event loop task,
-/// this uses a single PostgresConnection directly. This allows tests to
-/// exit cleanly without hanging on background tasks.
-///
-/// **Current Status**: Process exits cleanly but queries fail with PSQLError.
-/// PostgresConnection appears to need the client.run() event loop to function.
+/// Implements the pattern from PostgresNIO's own test suite:
+/// - PostgresClient.run() runs in a child Task
+/// - Graceful shutdown via task cancellation
+/// - Process exits cleanly after tests complete
 final class TestConnection: Database.Writer, @unchecked Sendable {
-    private let connection: PostgresConnection
+    private let client: PostgresClient
+    private let runTask: Task<Void, Never>
 
-    init(configuration: PostgresClient.Configuration) async throws {
-        // For tests, just use .disable TLS for simplicity
-        // Tests run against local PostgreSQL which typically doesn't need TLS
-        let connConfig = PostgresConnection.Configuration(
-            host: configuration.host ?? "localhost",
-            port: configuration.port ?? 5432,
-            username: configuration.username,
-            password: configuration.password,
-            database: configuration.database,
-            tls: .disable
+    init(configuration: PostgresClient.Configuration) async {
+        // Create PostgresClient with shared EventLoopGroup (like PostgresNIO tests)
+        let client = PostgresClient(
+            configuration: configuration,
+            eventLoopGroup: testEventLoopGroup,
+            backgroundLogger: Logger(label: "test-db")
         )
+        self.client = client
 
-        // Create a single connection directly
-        self.connection = try await PostgresConnection.connect(
-            on: MultiThreadedEventLoopGroup.singleton.next(),
-            configuration: connConfig,
-            id: 1,
-            logger: Logger(label: "test-connection")
-        )
+        // Start client.run() in a task (like PostgresNIO tests do)
+        // Capture client directly, not self
+        let runTask = Task {
+            await client.run()
+        }
+        self.runTask = runTask
+
+        // Register with manager for shutdown
+        await testClientManager.register(client: client, runTask: runTask)
+
+        // Register shutdown handler on first client creation
+        if !shutdownHandlerRegistered {
+            shutdownHandlerRegistered = true
+            // Use atexit to ensure cleanup happens on process exit
+            atexit {
+                // Run async shutdown synchronously via runloop
+                let semaphore = DispatchSemaphore(value: 0)
+                Task {
+                    await testClientManager.shutdownAll()
+                    semaphore.signal()
+                }
+                _ = semaphore.wait(timeout: .now() + .seconds(5))
+            }
+        }
+
+        // Give client a moment to initialize
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
     }
 
     func read<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        let conn = Database.Connection(connection)
-        return try await block(conn)
+        try await client.withConnection { postgresConnection in
+            let connection = Database.Connection(postgresConnection)
+            return try await block(connection)
+        }
     }
 
     func write<T: Sendable>(
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        let conn = Database.Connection(connection)
-        return try await block(conn)
+        try await client.withConnection { postgresConnection in
+            let connection = Database.Connection(postgresConnection)
+            return try await block(connection)
+        }
     }
 
     func close() async throws {
-        try await connection.close()
+        // Shutdown handled by global manager
     }
 }
