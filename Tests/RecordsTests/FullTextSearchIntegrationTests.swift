@@ -340,7 +340,7 @@ struct FullTextSearchIntegrationTests {
                                 matching: "Swift",
                                 startDelimiter: "<mark>",
                                 stopDelimiter: "</mark>",
-                                maxWords: 20
+                                wordRange: TextSearch.WordRange(min: 10, max: 20)
                             )
                         )
                     }
@@ -480,30 +480,29 @@ struct FullTextSearchIntegrationTests {
         }
     }
 
-    // TODO: Fix normalization - currently causes PostgreSQL error
-    // @Test("Rank with normalization")
-    // func rankWithNormalization() async {
-    //     await assertQuery(
-    //         Article
-    //             .where { $0.match("Swift") }
-    //             .select { $0.title }
-    //             .order { $0.rank(by: "Swift", normalization: .divideByLength) }
-    //     ) {
-    //         """
-    //         SELECT "articles"."title"
-    //         FROM "articles"
-    //         WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
-    //         ORDER BY ts_rank("articles"."search_vector", to_tsquery('english', 'Swift'), 2)
-    //         """
-    //     } results: {
-    //         """
-    //         ┌───────────────────────────┐
-    //         │ "Swift Concurrency Guide" │
-    //         │ "Server-Side Swift"       │
-    //         └───────────────────────────┘
-    //         """
-    //     }
-    // }
+    @Test("Rank with normalization")
+    func rankWithNormalization() async {
+        await assertQuery(
+            Article
+                .where { $0.match("Swift") }
+                .select { $0.title }
+                .order { $0.rank(by: "Swift", normalization: .divideByLength) }
+        ) {
+            """
+            SELECT "articles"."title"
+            FROM "articles"
+            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
+            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english', 'Swift'), 2)
+            """
+        } results: {
+            """
+            ┌───────────────────────────┐
+            │ "Server-Side Swift"       │
+            │ "Swift Concurrency Guide" │
+            └───────────────────────────┘
+            """
+        }
+    }
 
     @Test("Rank by coverage")
     func rankByCoverage() async {
@@ -528,37 +527,61 @@ struct FullTextSearchIntegrationTests {
         }
     }
 
-    // TODO: Fix headline - currently causes PostgreSQL error (likely options string format)
-    // @Test("Headline highlighting")
-    // func headlineHighlighting() async {
-    //     await assertQuery(
-    //         Article
-    //             .where { $0.match("Swift") }
-    //             .select {
-    //                 ($0.title, $0.body.headline(
-    //                     matching: "Swift",
-    //                     startDelimiter: "**",
-    //                     stopDelimiter: "**",
-    //                     maxWords: 10
-    //                 ))
-    //             }
-    //             .order(by: \.title)
-    //     ) {
-    //         """
-    //         SELECT "articles"."title", ts_headline('english', "articles"."body", to_tsquery('english', 'Swift'), 'StartSel=**, StopSel=**, MaxWords=10')
-    //         FROM "articles"
-    //         WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
-    //         ORDER BY "articles"."title"
-    //         """
-    //     } results: {
-    //         """
-    //         ┌───────────────────────────┬─────────────────────────────────────────────────────────┐
-    //         │ "Server-Side Swift"       │ "Building web services with **Swift** on the server"   │
-    //         │ "Swift Concurrency Guide" │ "Modern async/await patterns in **Swift** programming" │
-    //         └───────────────────────────┴─────────────────────────────────────────────────────────┘
-    //         """
-    //     }
-    // }
+    @Test("WordRange validation")
+    func wordRangeValidation() {
+        // Valid ranges
+        #expect(TextSearch.WordRange(min: 3, max: 10) != nil)
+        #expect(TextSearch.WordRange(min: 1, max: 2) != nil)
+        #expect(TextSearch.WordRange(min: 15, max: 100) != nil)
+
+        // Invalid: min >= max
+        #expect(TextSearch.WordRange(min: 10, max: 10) == nil)
+        #expect(TextSearch.WordRange(min: 10, max: 3) == nil)
+
+        // Invalid: non-positive values
+        #expect(TextSearch.WordRange(min: 0, max: 10) == nil)
+        #expect(TextSearch.WordRange(min: -5, max: 10) == nil)
+        #expect(TextSearch.WordRange(min: 5, max: 0) == nil)
+
+        // Presets are valid
+        #expect(TextSearch.WordRange.short.min == 3)
+        #expect(TextSearch.WordRange.short.max == 10)
+        #expect(TextSearch.WordRange.medium.min == 10)
+        #expect(TextSearch.WordRange.medium.max == 25)
+        #expect(TextSearch.WordRange.long.min == 20)
+        #expect(TextSearch.WordRange.long.max == 50)
+    }
+
+    @Test("Headline highlighting")
+    func headlineHighlighting() async {
+        await assertQuery(
+            Article
+                .where { $0.match("Swift") }
+                .select {
+                    ($0.title, $0.body.headline(
+                        matching: "Swift",
+                        startDelimiter: "**",
+                        stopDelimiter: "**",
+                        wordRange: .short
+                    ))
+                }
+                .order(by: \.title)
+        ) {
+            """
+            SELECT "articles"."title", ts_headline('english', "articles"."body", to_tsquery('english', 'Swift'), 'StartSel=**, StopSel=**, MinWords=3, MaxWords=10')
+            FROM "articles"
+            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
+            ORDER BY "articles"."title"
+            """
+        } results: {
+            """
+            ┌───────────────────────────┬─────────────────────────────────────┐
+            │ "Server-Side Swift"       │ "**Swift** on the server"           │
+            │ "Swift Concurrency Guide" │ "patterns in **Swift** programming" │
+            └───────────────────────────┴─────────────────────────────────────┘
+            """
+        }
+    }
 
     @Test("Select with rank score")
     func selectWithRank() async {

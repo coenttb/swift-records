@@ -49,8 +49,13 @@ func assertQuery<each V: QueryRepresentable, S: Statement<(repeat each V)>>(
     await RecordsTestSupport.assertQuery(
         query,
         execute: { statement in
-            try await database.read { db in
-                try await db.fetchAll(statement)
+            do {
+                return try await database.read { db in
+                    return try await db.fetchAll(statement)
+                }
+            } catch {
+                Swift.print(String(reflecting: error))
+                throw error
             }
         },
         sql: sql,
