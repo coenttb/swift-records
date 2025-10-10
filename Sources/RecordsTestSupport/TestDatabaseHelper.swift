@@ -14,7 +14,7 @@ import Testing
 
 extension Database.Writer {
     /// Creates the Reminder test schema (matches upstream swift-structured-queries)
-    func createReminderSchema() async throws {
+    package func createReminderSchema() async throws {
         try await self.write { db in
             // Create remindersLists table
             try await db.execute("""
