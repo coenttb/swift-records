@@ -20,7 +20,7 @@ struct ConfigurationTests {
         #expect(config.host == "localhost")
         #expect(config.port == 5432)
         #expect(config.database == "swift-records-development")
-        #expect(config.username == "admin")
+        #expect(config.username == "coenttb")
         #expect(config.password == "")
     }
 
@@ -65,7 +65,7 @@ struct ConfigurationTests {
         let config = PostgresClient.Configuration(
             host: "localhost",
             port: 5432,
-            username: "admin",
+            username: "coenttb",
             password: nil,
             database: "database-postgres-dev",
             tls: .disable
@@ -74,7 +74,7 @@ struct ConfigurationTests {
         #expect(config.host == "localhost")
         #expect(config.port == 5432)
         #expect(config.database == "database-postgres-dev")
-        #expect(config.username == "admin")
+        #expect(config.username == "coenttb")
         #expect(config.password == nil)
     }
 
@@ -84,7 +84,7 @@ struct ConfigurationTests {
         let singleConfig = PostgresClient.Configuration(
             host: "localhost",
             port: 5432,
-            username: "admin",
+            username: "coenttb",
             password: nil,
             database: "database-postgres-dev",
             tls: .disable
@@ -98,7 +98,7 @@ struct ConfigurationTests {
         let poolConfig = PostgresClient.Configuration(
             host: "localhost",
             port: 5432,
-            username: "admin",
+            username: "coenttb",
             password: nil,
             database: "database-postgres-dev",
             tls: .disable

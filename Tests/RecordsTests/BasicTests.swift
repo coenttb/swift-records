@@ -21,7 +21,7 @@ struct BasicTests {
         #expect(config.host == "localhost")
         #expect(config.port == 5432)
         #expect(config.database == "swift-records-development")
-        #expect(config.username == "admin")
+        #expect(config.username == "coenttb")
     }
 }
 

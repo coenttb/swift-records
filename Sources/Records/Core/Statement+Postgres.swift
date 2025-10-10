@@ -1,5 +1,59 @@
 import StructuredQueriesPostgres
 
+// MARK: - TemporaryView Validation
+
+/// Error thrown when attempting to create a view with parameterized queries
+public struct ParameterizedViewError: Error, CustomStringConvertible {
+    public let parameterCount: Int
+    public let sql: String
+
+    public init(parameterCount: Int, sql: String) {
+        self.parameterCount = parameterCount
+        self.sql = sql
+    }
+
+    public var description: String {
+        """
+        Views cannot contain parameterized queries.
+
+        Found \(parameterCount) parameter(s) in the view definition.
+
+        Avoid using:
+        - .limit() / .offset() with literal values
+        - .where { } closures with literal comparisons (e.g., .where { $0.id == 1 })
+
+        Use instead:
+        - Keypath-based operations (e.g., .where(\\.isActive))
+        - Column-to-column comparisons (e.g., .where { $0.column.eq($1.otherColumn) })
+
+        Generated SQL with parameters:
+        \(sql)
+        """
+    }
+}
+
+extension TemporaryView {
+    /// Executes a CREATE TEMPORARY VIEW statement with validation.
+    ///
+    /// PostgreSQL views cannot contain parameterized queries. This method validates
+    /// that the view definition has no query parameters before execution.
+    ///
+    /// - Parameter db: A database connection.
+    /// - Throws: `ParameterizedViewError` if the view contains parameterized queries.
+    @inlinable
+    public func execute(_ db: any Database.Connection.`Protocol`) async throws {
+        let (sql, bindings) = query.prepare { "$\($0)" }
+
+        guard bindings.isEmpty else {
+            throw ParameterizedViewError(parameterCount: bindings.count, sql: sql)
+        }
+
+        try await db.execute(sql)
+    }
+}
+
+// MARK: - General Statement Extensions
+
 extension Statement {
     /// Executes a structured query on the given database connection.
     ///
