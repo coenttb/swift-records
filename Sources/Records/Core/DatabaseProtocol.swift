@@ -143,5 +143,63 @@ extension Database.Connection {
         func fetchCursor<QueryValue: QueryRepresentable>(
             _ statement: some Statement<QueryValue>
         ) async throws -> Database.Cursor<QueryValue.QueryOutput>
+
+        /// Executes a block within a nested transaction.
+        ///
+        /// Default implementation delegates to the extension method.
+        /// TransactionConnection overrides this to provide proper nesting.
+        func withNestedTransaction<T: Sendable>(
+            isolation: TransactionIsolationLevel?,
+            _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
+        ) async throws -> T
+
+        /// Executes a block within a savepoint.
+        ///
+        /// Default implementation delegates to raw SQL execution.
+        /// TransactionConnection overrides this to track nesting depth.
+        func withSavepoint<T: Sendable>(
+            _ name: String?,
+            _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
+        ) async throws -> T
+    }
+}
+
+// MARK: - Default Implementations
+
+extension Database.Connection.`Protocol` {
+    /// Default implementation starts a new transaction.
+    public func withNestedTransaction<T: Sendable>(
+        isolation: TransactionIsolationLevel?,
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
+    ) async throws -> T {
+        // For non-transaction connections, start a new transaction
+        let isolationLevel = isolation ?? .readCommitted
+        try await execute("BEGIN ISOLATION LEVEL \(isolationLevel.rawValue)")
+        do {
+            let result = try await block(self)
+            try await execute("COMMIT")
+            return result
+        } catch {
+            try await execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    /// Default implementation uses raw SQL savepoint commands.
+    public func withSavepoint<T: Sendable>(
+        _ name: String?,
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
+    ) async throws -> T {
+        let savepointName = name ?? "sp_\(UUID().uuidString.prefix(8))"
+
+        try await execute("SAVEPOINT \(savepointName)")
+        do {
+            let result = try await block(self)
+            try await execute("RELEASE SAVEPOINT \(savepointName)")
+            return result
+        } catch {
+            try await execute("ROLLBACK TO SAVEPOINT \(savepointName)")
+            throw error
+        }
     }
 }

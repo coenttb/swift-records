@@ -25,7 +25,7 @@ extension Database.Writer {
         try await write { db in
             try await db.execute("BEGIN ISOLATION LEVEL \(isolation.rawValue)")
             do {
-                let result = try await block(db)
+                let result = try await block(Database.TransactionConnection(db))
                 try await db.execute("COMMIT")
                 return result
             } catch {
@@ -66,44 +66,88 @@ extension Database.Writer {
         }
     }
 
+    /// Executes a block of operations within a nested transaction.
+    ///
+    /// If already in a transaction, this creates a savepoint. Otherwise,
+    /// it starts a new transaction. This provides automatic nesting support
+    /// without requiring the caller to track transaction state.
+    ///
+    /// ```swift
+    /// try await db.withTransaction { db in
+    ///     // Main transaction
+    ///     try await Order.insert { ... }.execute(db)
+    ///
+    ///     // Nested transaction (uses savepoint automatically)
+    ///     try await db.withNestedTransaction { db in
+    ///         try await OrderItem.insert { ... }.execute(db)
+    ///         // If this fails, only the nested transaction rolls back
+    ///     }
+    ///
+    ///     // Main transaction continues
+    /// }
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - isolation: The isolation level (only used for new transactions).
+    ///   - block: The operations to perform within the nested transaction.
+    /// - Returns: The value returned by the block.
+    public func withNestedTransaction<T: Sendable>(
+        isolation: TransactionIsolationLevel? = nil,
+        _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
+    ) async throws -> T {
+        // This method will be overridden by TransactionConnection
+        // For non-transaction connections, start a new transaction
+        return try await withTransaction(
+            isolation: isolation ?? .readCommitted,
+            block
+        )
+    }
+
     /// Executes a block of operations within a savepoint.
     ///
     /// Savepoints allow you to rollback to a specific point within a transaction
-    /// without rolling back the entire transaction.
+    /// without rolling back the entire transaction. The savepoint name is optional
+    /// and will be auto-generated if not provided.
     ///
     /// ```swift
     /// try await database.withTransaction { db in
     ///     try Player.insert { ... }.execute(db)
-    ///     
+    ///
     ///     do {
-    ///         try await db.withSavepoint("risky_operation") { db in
+    ///         // Auto-generated savepoint name
+    ///         try await db.withSavepoint { db in
     ///             try Team.update { ... }.execute(db)
     ///             // If this fails, only this operation is rolled back
     ///         }
     ///     } catch {
     ///         // Handle the error, but continue with the transaction
     ///     }
-    ///     
-    ///     try Score.insert { ... }.execute(db)
+    ///
+    ///     // Named savepoint for clarity
+    ///     try await db.withSavepoint("critical_update") { db in
+    ///         try Score.insert { ... }.execute(db)
+    ///     }
     /// }
     /// ```
     ///
     /// - Parameters:
-    ///   - name: The name of the savepoint.
+    ///   - name: The name of the savepoint (auto-generated if nil).
     ///   - block: The operations to perform within the savepoint.
     /// - Returns: The value returned by the block.
     public func withSavepoint<T: Sendable>(
-        _ name: String,
+        _ name: String? = nil,
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        try await write { db in
-            try await db.execute("SAVEPOINT \(name)")
+        let savepointName = name ?? "sp_\(UUID().uuidString.prefix(8))"
+
+        return try await write { db in
+            try await db.execute("SAVEPOINT \(savepointName)")
             do {
                 let result = try await block(db)
-                try await db.execute("RELEASE SAVEPOINT \(name)")
+                try await db.execute("RELEASE SAVEPOINT \(savepointName)")
                 return result
             } catch {
-                try await db.execute("ROLLBACK TO SAVEPOINT \(name)")
+                try await db.execute("ROLLBACK TO SAVEPOINT \(savepointName)")
                 throw error
             }
         }
