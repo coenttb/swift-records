@@ -92,7 +92,6 @@ struct ConfigurationTests {
 
         let single = await Database.singleConnection(configuration: singleConfig)
         // Just verify it was created
-        #expect(single != nil)
         try await single.close()
 
         // Test pool connection
@@ -110,7 +109,6 @@ struct ConfigurationTests {
             minConnections: 3,
             maxConnections: 10
         )
-        #expect(pool != nil)
         try await pool.close()
     }
 }

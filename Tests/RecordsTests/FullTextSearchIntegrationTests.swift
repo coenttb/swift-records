@@ -5,91 +5,6 @@ import RecordsTestSupport
 import StructuredQueriesPostgres
 import Testing
 
-// MARK: - Test Model
-
-@Table
-struct Article: Codable, Equatable, Identifiable, FullTextSearchable {
-    let id: Int
-    var title: String
-    var body: String
-    var author: String
-
-    static var searchVectorColumn: String { "search_vector" }
-}
-
-// MARK: - Test Database Setup
-
-extension Database.TestDatabaseSetupMode {
-    /// Articles schema with full-text search pre-configured
-    static let withArticlesFTS = Database.TestDatabaseSetupMode { db in
-        try await db.write { conn in
-            // Create articles table
-            try await conn.execute(
-                """
-                CREATE TABLE "articles" (
-                    "id" SERIAL PRIMARY KEY,
-                    "title" TEXT NOT NULL,
-                    "body" TEXT NOT NULL,
-                    "author" TEXT NOT NULL,
-                    "search_vector" tsvector
-                )
-                """
-            )
-
-            // Create GIN index on search_vector
-            try await conn.execute(
-                """
-                CREATE INDEX "articles_search_vector_idx"
-                ON "articles"
-                USING GIN ("search_vector")
-                """
-            )
-
-            // Create trigger function for automatic search vector updates
-            try await conn.execute(
-                """
-                CREATE OR REPLACE FUNCTION articles_search_vector_trigger() RETURNS trigger AS $$
-                BEGIN
-                  NEW."search_vector" :=
-                    setweight(to_tsvector('pg_catalog.english', coalesce(NEW."title", '')), 'A') ||
-                    setweight(to_tsvector('pg_catalog.english', coalesce(NEW."body", '')), 'B') ||
-                    setweight(to_tsvector('pg_catalog.english', coalesce(NEW."author", '')), 'C');
-                  RETURN NEW;
-                END
-                $$ LANGUAGE plpgsql
-                """
-            )
-
-            // Create trigger
-            try await conn.execute(
-                """
-                CREATE TRIGGER articles_search_vector_update
-                BEFORE INSERT OR UPDATE ON "articles"
-                FOR EACH ROW EXECUTE FUNCTION articles_search_vector_trigger()
-                """
-            )
-
-            // Insert test data
-            try await conn.execute(
-                """
-                INSERT INTO "articles" ("title", "body", "author") VALUES
-                ('PostgreSQL Full-Text Search', 'Learn about PostgreSQL full-text search capabilities', 'Alice'),
-                ('Swift Concurrency Guide', 'Modern async/await patterns in Swift programming', 'Bob'),
-                ('Database Indexing', 'Understanding B-tree and GIN indexes', 'Alice'),
-                ('Server-Side Swift', 'Building web services with Swift on the server', 'Charlie')
-                """
-            )
-        }
-    }
-}
-
-extension Database.TestDatabase {
-    /// Creates a test database with Articles table and FTS pre-configured
-    static func withArticlesFTS() -> LazyTestDatabase {
-        LazyTestDatabase(setupMode: .withArticlesFTS)
-    }
-}
-
 // MARK: - Test Suite
 
 @Suite(
@@ -257,7 +172,7 @@ struct FullTextSearchIntegrationTests {
             let results = try await database.read { db in
                 try await Article
                     .where { $0.match("Swift") }
-                    .order { $0.rank("Swift") }
+                    .order { $0.rank(by: "Swift") }
                     .fetchAll(db)
             }
 
@@ -372,7 +287,7 @@ struct FullTextSearchIntegrationTests {
             let results = try await database.read { db in
                 try await Article
                     .where { $0.match("Swift") }
-                    .order { $0.rank("Swift", weights: [0.1, 0.2, 0.4, 1.0]) }
+                    .order { $0.rank(by: "Swift", weights: [0.1, 0.2, 0.4, 1.0]) }
                     .fetchAll(db)
             }
 
@@ -395,11 +310,11 @@ struct FullTextSearchIntegrationTests {
     @Test("Coverage-based ranking for phrase searches")
     func rankCoverageTest() async throws {
         do {
-            // Use rankCoverage which considers proximity and coverage
+            // Use rank(byCoverage:) which considers proximity and coverage
             let results = try await database.read { db in
                 try await Article
                     .where { $0.match("PostgreSQL") }
-                    .order { $0.rankCoverage("PostgreSQL") }
+                    .order { $0.rank(byCoverage: "PostgreSQL") }
                     .fetchAll(db)
             }
 
@@ -409,5 +324,150 @@ struct FullTextSearchIntegrationTests {
             print("❌ Coverage-based ranking failed: \(String(reflecting: error))")
             throw error
         }
+    }
+
+    @Test("Highlight search matches with ts_headline")
+    func highlightMatches() async throws {
+        do {
+            // Search and highlight matches in results
+            let results = try await database.read { db in
+                try await Article
+                    .where { $0.match("Swift") }
+                    .select {
+                        (
+                            $0.title,
+                            $0.body.headline(
+                                matching: "Swift",
+                                startDelimiter: "<mark>",
+                                stopDelimiter: "</mark>",
+                                maxWords: 20
+                            )
+                        )
+                    }
+                    .fetchAll(db)
+            }
+
+            #expect(results.count == 2)
+
+            // Check that matches are highlighted with <mark> tags
+            let bodyHighlights = results.map { $0.1 }
+            #expect(bodyHighlights.contains(where: { $0.contains("<mark>") && $0.contains("</mark>") }))
+
+            // Verify specific article has Swift highlighted in body
+            let swiftConcurrency = results.first { $0.0 == "Swift Concurrency Guide" }
+            #expect(swiftConcurrency != nil)
+            #expect(swiftConcurrency!.1.contains("<mark>Swift</mark>"))
+        } catch {
+            print("❌ Highlight matches failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+
+    @Test("Column-specific search with toTsvector")
+    func columnSpecificSearch() async throws {
+        do {
+            // Search only in title using ad-hoc tsvector conversion
+            let results = try await database.read { db in
+                try await Article
+                    .where { $0.title.match("Swift") }
+                    .fetchAll(db)
+            }
+
+            // Both articles with "Swift" in title
+            #expect(results.count == 2)
+
+            let titles = Set(results.map(\.title))
+            #expect(titles.contains("Swift Concurrency Guide"))
+            #expect(titles.contains("Server-Side Swift"))
+        } catch {
+            print("❌ Column-specific search failed: \(String(reflecting: error))")
+            throw error
+        }
+    }
+}
+
+
+// MARK: - Test Model
+
+@Table
+struct Article: Codable, Equatable, Identifiable, FullTextSearchable {
+    let id: Int
+    var title: String
+    var body: String
+    var author: String
+
+    static var searchVectorColumn: String { "search_vector" }
+}
+
+// MARK: - Test Database Setup
+
+extension Database.TestDatabaseSetupMode {
+    /// Articles schema with full-text search pre-configured
+    static let withArticlesFTS = Database.TestDatabaseSetupMode { db in
+        try await db.write { conn in
+            // Create articles table
+            try await conn.execute(
+                """
+                CREATE TABLE "articles" (
+                    "id" SERIAL PRIMARY KEY,
+                    "title" TEXT NOT NULL,
+                    "body" TEXT NOT NULL,
+                    "author" TEXT NOT NULL,
+                    "search_vector" tsvector
+                )
+                """
+            )
+
+            // Create GIN index on search_vector
+            try await conn.execute(
+                """
+                CREATE INDEX "articles_search_vector_idx"
+                ON "articles"
+                USING GIN ("search_vector")
+                """
+            )
+
+            // Create trigger function for automatic search vector updates
+            try await conn.execute(
+                """
+                CREATE OR REPLACE FUNCTION articles_search_vector_trigger() RETURNS trigger AS $$
+                BEGIN
+                  NEW."search_vector" :=
+                    setweight(to_tsvector('pg_catalog.english', coalesce(NEW."title", '')), 'A') ||
+                    setweight(to_tsvector('pg_catalog.english', coalesce(NEW."body", '')), 'B') ||
+                    setweight(to_tsvector('pg_catalog.english', coalesce(NEW."author", '')), 'C');
+                  RETURN NEW;
+                END
+                $$ LANGUAGE plpgsql
+                """
+            )
+
+            // Create trigger
+            try await conn.execute(
+                """
+                CREATE TRIGGER articles_search_vector_update
+                BEFORE INSERT OR UPDATE ON "articles"
+                FOR EACH ROW EXECUTE FUNCTION articles_search_vector_trigger()
+                """
+            )
+
+            // Insert test data
+            try await conn.execute(
+                """
+                INSERT INTO "articles" ("title", "body", "author") VALUES
+                ('PostgreSQL Full-Text Search', 'Learn about PostgreSQL full-text search capabilities', 'Alice'),
+                ('Swift Concurrency Guide', 'Modern async/await patterns in Swift programming', 'Bob'),
+                ('Database Indexing', 'Understanding B-tree and GIN indexes', 'Alice'),
+                ('Server-Side Swift', 'Building web services with Swift on the server', 'Charlie')
+                """
+            )
+        }
+    }
+}
+
+extension Database.TestDatabase {
+    /// Creates a test database with Articles table and FTS pre-configured
+    static func withArticlesFTS() -> LazyTestDatabase {
+        LazyTestDatabase(setupMode: .withArticlesFTS)
     }
 }

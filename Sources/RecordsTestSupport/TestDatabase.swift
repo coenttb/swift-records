@@ -118,7 +118,7 @@ extension Database {
         // Create direct connection without background tasks
         // This prevents hanging on test exit
         let config = try configuration ?? PostgresClient.Configuration.fromEnvironment()
-        let database = try await TestConnection(configuration: config)
+        let database = await TestConnection(configuration: config)
 
         // Create and use test schema
         try await database.write { db in
@@ -149,7 +149,7 @@ extension Database {
 
         // For simplicity in tests, use a single connection even for "pool"
         // Real pooling not needed for tests
-        let pool = try await TestConnection(configuration: config)
+        let pool = await TestConnection(configuration: config)
 
         // Create and use test schema
         try await pool.write { db in

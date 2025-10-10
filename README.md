@@ -11,6 +11,7 @@ A high-level, type-safe database abstraction layer for PostgreSQL in Swift, buil
 - 🏊 **Connection Pooling**: Automatic connection lifecycle management with configurable pool sizes
 - 🔄 **Transactions**: Full transaction support with isolation levels and savepoints
 - 📦 **Migrations**: Version-tracked schema migrations with automatic execution
+- 🔍 **Full-Text Search**: Type-safe PostgreSQL full-text search with highlighting and ranking
 - 🧪 **Testing Utilities**: Schema isolation for parallel test execution
 - 🎯 **Type Safety**: Leverages Swift's type system and StructuredQueries for compile-time guarantees
 - 🚀 **Actor-Based Concurrency**: Safe multi-threaded database access with Swift 6.0 concurrency
@@ -536,6 +537,323 @@ struct MaintenanceService {
     }
 }
 ```
+
+## Full-Text Search
+
+Swift Records provides first-class support for PostgreSQL's powerful full-text search capabilities through an elegant type-safe DSL. Built on top of PostgreSQL's `tsvector` and `tsquery` types, you can add sophisticated search functionality to your application with just a few lines of code.
+
+### Quick Start
+
+```swift
+import Records
+import StructuredQueriesPostgres
+
+// 1. Make your model searchable
+@Table
+struct Article: FullTextSearchable {
+    let id: Int
+    var title: String
+    var body: String
+    var author: String
+
+    // Specify the tsvector column name (defaults to "search_vector")
+    static var searchVectorColumn: String { "search_vector" }
+}
+
+// 2. Set up full-text search in a migration
+migrator.registerMigration("add_articles_fts") { db in
+    // Add tsvector column
+    try await db.execute("""
+        ALTER TABLE articles
+        ADD COLUMN search_vector tsvector
+    """)
+
+    // Create GIN index for fast searches
+    try await db.execute("""
+        CREATE INDEX articles_search_idx
+        ON articles
+        USING GIN (search_vector)
+    """)
+
+    // Create trigger to automatically update search vector
+    try await db.execute("""
+        CREATE OR REPLACE FUNCTION articles_search_trigger() RETURNS trigger AS $$
+        BEGIN
+          NEW.search_vector :=
+            setweight(to_tsvector('english', coalesce(NEW.title, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(NEW.body, '')), 'B') ||
+            setweight(to_tsvector('english', coalesce(NEW.author, '')), 'C');
+          RETURN NEW;
+        END
+        $$ LANGUAGE plpgsql
+    """)
+
+    try await db.execute("""
+        CREATE TRIGGER articles_search_update
+        BEFORE INSERT OR UPDATE ON articles
+        FOR EACH ROW EXECUTE FUNCTION articles_search_trigger()
+    """)
+
+    // Backfill existing data
+    try await db.execute("""
+        UPDATE articles SET search_vector =
+          setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+          setweight(to_tsvector('english', coalesce(body, '')), 'B') ||
+          setweight(to_tsvector('english', coalesce(author, '')), 'C')
+    """)
+}
+
+// 3. Search your content
+struct SearchService {
+    @Dependency(\.defaultDatabase) var db
+
+    func searchArticles(query: String) async throws -> [Article] {
+        try await db.read { db in
+            try await Article
+                .where { $0.match(query) }
+                .order { $0.rank(query) }
+                .fetchAll(db)
+        }
+    }
+}
+```
+
+### Search Methods
+
+Swift Records provides multiple search methods for different use cases:
+
+#### Basic Search (`match`)
+
+Uses PostgreSQL's `to_tsquery()` for powerful boolean searches:
+
+```swift
+// Single term
+Article.where { $0.match("Swift") }
+
+// Boolean AND - both terms must match
+Article.where { $0.match("Swift & PostgreSQL") }
+
+// Boolean OR - either term can match
+Article.where { $0.match("Swift | Rust") }
+
+// Negation - must NOT contain term
+Article.where { $0.match("Swift & !Objective-C") }
+
+// Phrase search with adjacency
+Article.where { $0.match("quick <-> brown") }  // Words must be adjacent
+```
+
+#### Plain Text Search (`plainMatch`)
+
+Safe for user input - treats all words as AND-connected terms:
+
+```swift
+// User enters: "swift postgresql database"
+// Automatically becomes: swift & postgresql & database
+Article.where { $0.plainMatch(userInput) }
+```
+
+#### Web Search Syntax (`webMatch`)
+
+Google-like search syntax for end users:
+
+```swift
+// Quoted phrases
+Article.where { $0.webMatch(#""swift postgresql" database"#) }
+
+// Exclusions with minus
+Article.where { $0.webMatch("swift -objective-c") }
+
+// OR operator
+Article.where { $0.webMatch("Swift OR Rust") }
+```
+
+#### Phrase Search (`phraseMatch`)
+
+Exact phrase matching where words must appear in order:
+
+```swift
+// Finds "San Francisco" but not "Francisco's San Diego trip"
+Article.where { $0.phraseMatch("San Francisco") }
+```
+
+### Ranking Results
+
+Order search results by relevance:
+
+```swift
+// Basic relevance ranking
+Article
+    .where { $0.match("Swift") }
+    .order { $0.rank("Swift") }
+    .fetchAll(db)
+
+// Weighted ranking - prioritize title matches over body
+Article
+    .where { $0.match("Swift") }
+    .order {
+        $0.rank(
+            "Swift",
+            weights: [0.1, 0.2, 0.4, 1.0]  // [D, C, B, A]
+        )
+    }
+    .fetchAll(db)
+
+// Coverage-based ranking (better for phrase searches)
+Article
+    .where { $0.match("database indexing") }
+    .order { $0.rankCoverage("database indexing") }
+    .fetchAll(db)
+```
+
+**Weight Labels:**
+- `A` - Highest importance (typically titles)
+- `B` - High importance (typically subtitles, emphasized text)
+- `C` - Medium importance (typically metadata, tags)
+- `D` - Lowest importance (typically body text)
+
+### Highlighting Search Results
+
+Show users exactly where matches appear:
+
+```swift
+// Highlight matches in search results
+let results = try await db.read { db in
+    try await Article
+        .where { $0.match("Swift") }
+        .select {
+            (
+                $0.title,
+                $0.body.tsHeadline(
+                    "Swift",
+                    startSel: "<mark>",
+                    stopSel: "</mark>",
+                    maxWords: 50
+                )
+            )
+        }
+        .fetchAll(db)
+}
+
+// Returns: ("Swift Concurrency Guide", "Modern async/await patterns in <mark>Swift</mark> programming...")
+```
+
+### Column-Specific Search
+
+Search within specific columns:
+
+```swift
+// Ad-hoc search without pre-computed tsvector
+Article.where { $0.title.matchText("Swift") }
+
+// Only searches the title column
+```
+
+### Search Configuration
+
+PostgreSQL supports multiple languages for stemming and stop words:
+
+```swift
+// English (default)
+Article.where { $0.match("running", language: "english") }
+// Matches: run, runs, running, ran
+
+// Simple (no stemming)
+Article.where { $0.match("running", language: "simple") }
+// Matches: only "running" exactly
+
+// Other languages
+Article.where { $0.match("courir", language: "french") }
+Article.where { $0.match("laufen", language: "german") }
+```
+
+### Multi-Column Weighting
+
+Weight different columns differently in your search vector:
+
+```swift
+// Title has highest weight (A), body medium (B), tags low (C)
+CREATE TRIGGER product_search_update
+BEFORE INSERT OR UPDATE ON products
+FOR EACH ROW EXECUTE FUNCTION products_search_trigger()
+
+CREATE OR REPLACE FUNCTION products_search_trigger() RETURNS trigger AS $$
+BEGIN
+  NEW.search_vector :=
+    setweight(to_tsvector('english', coalesce(NEW.name, '')), 'A') ||
+    setweight(to_tsvector('english', coalesce(NEW.description, '')), 'B') ||
+    setweight(to_tsvector('english', coalesce(NEW.tags, '')), 'C');
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql
+```
+
+### Performance Considerations
+
+1. **Always use GIN indexes** for tsvector columns:
+   ```sql
+   CREATE INDEX articles_search_idx ON articles USING GIN (search_vector);
+   ```
+
+2. **Update search vectors automatically** with triggers to keep them in sync
+
+3. **Use appropriate search method**:
+   - `match()` - Most powerful but requires valid tsquery syntax
+   - `plainMatch()` - Safest for user input
+   - `webMatch()` - Best UX for end users
+
+4. **Consider normalization** for ranking:
+   ```swift
+   Article.order { $0.rank("query", normalization: 1) }
+   // 1 = divide by (1 + log(length)) - favors longer documents less
+   ```
+
+### Complete Search Example
+
+```swift
+struct ArticleSearchService {
+    @Dependency(\.defaultDatabase) var db
+
+    struct SearchResult {
+        let article: Article
+        let headline: String
+        let rank: Double
+    }
+
+    func search(query: String, limit: Int = 20) async throws -> [SearchResult] {
+        // Sanitize user input with plainMatch for safety
+        let results = try await db.read { db in
+            try await Article
+                .where { $0.plainMatch(query) }
+                .select {
+                    (
+                        $0,  // Full article
+                        $0.body.tsHeadline(
+                            query,
+                            startSel: "<mark>",
+                            stopSel: "</mark>",
+                            maxWords: 50
+                        ),
+                        $0.rank(query, weights: [0.1, 0.2, 0.4, 1.0])
+                    )
+                }
+                .order { $0.rank(query, weights: [0.1, 0.2, 0.4, 1.0]) }
+                .limit(limit)
+                .fetchAll(db)
+        }
+
+        return results.map { article, headline, rank in
+            SearchResult(article: article, headline: headline, rank: rank)
+        }
+    }
+}
+```
+
+### PostgreSQL Full-Text Search Resources
+
+- [PostgreSQL Full-Text Search Documentation](https://www.postgresql.org/docs/current/textsearch.html)
+- [Text Search Functions](https://www.postgresql.org/docs/current/functions-textsearch.html)
+- [GIN Indexes](https://www.postgresql.org/docs/current/textsearch-indexes.html)
 
 ## Development Documentation
 

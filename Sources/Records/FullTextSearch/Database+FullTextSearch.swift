@@ -1,6 +1,5 @@
 import Foundation
 import StructuredQueriesPostgres
-//import StructuredQueriesPostgresSupport
 import PostgresNIO
 
 // MARK: - Supporting Types
@@ -18,9 +17,9 @@ public enum SearchVectorTriggerType: Sendable {
 /// Weighted column configuration for custom triggers.
 public struct WeightedColumn: Sendable {
     public let name: String
-    public let weight: TSVectorWeight
+    public let weight: TextSearch.Weight
 
-    public init(name: String, weight: TSVectorWeight) {
+    public init(name: String, weight: TextSearch.Weight) {
         self.name = name
         self.weight = weight
     }
