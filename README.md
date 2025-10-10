@@ -542,6 +542,10 @@ struct MaintenanceService {
 
 Swift Records provides first-class support for PostgreSQL's powerful full-text search capabilities through an elegant type-safe DSL. Built on top of PostgreSQL's `tsvector` and `tsquery` types, you can add sophisticated search functionality to your application with just a few lines of code.
 
+> **📐 Architecture Note**: PostgreSQL full-text search uses dedicated `tsvector` columns within regular tables, unlike SQLite's virtual table approach. This necessitates the `searchVectorColumn` protocol requirement to specify which column to search.
+>
+> **Default behavior**: Most tables can use the default `"search_vector"` column name without any configuration—just conform to `FullTextSearchable` and you're done. See the [Full-Text Search Guide](Sources/Records/Documentation.docc/FullTextSearch.md#Understanding-searchVectorColumn) for architectural details.
+
 ### Quick Start
 
 ```swift
@@ -617,6 +621,13 @@ struct SearchService {
     }
 }
 ```
+
+> **📚 For comprehensive documentation**, see the [Full-Text Search Guide](Sources/Records/Documentation.docc/FullTextSearch.md) including:
+> - [Why searchVectorColumn is required](Sources/Records/Documentation.docc/FullTextSearch.md#Understanding-searchVectorColumn)
+> - [PostgreSQL vs SQLite comparison](Sources/Records/Documentation.docc/FullTextSearch.md#Understanding-searchVectorColumn)
+> - [Multi-language support](Sources/Records/Documentation.docc/FullTextSearch.md#Multi-Language-Support)
+> - [Performance tuning](Sources/Records/Documentation.docc/FullTextSearch.md#Performance-Considerations)
+> - [Complete examples](Sources/Records/Documentation.docc/FullTextSearch.md#Complete-Example)
 
 ### Search Methods
 

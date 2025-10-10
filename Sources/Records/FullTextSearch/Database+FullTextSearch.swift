@@ -43,6 +43,27 @@ extension Database.Error {
     }
 }
 
+// MARK: - Language Validation
+
+/// Validates that a language string is safe for use in SQL.
+///
+/// This prevents SQL injection by ensuring the language parameter only contains
+/// alphanumeric characters and underscores (valid PostgreSQL text search configuration names).
+///
+/// - Parameter language: The language/configuration name to validate
+/// - Throws: Database.Error.invalidArgument if language contains invalid characters
+fileprivate func validateLanguage(_ language: String) throws {
+    let allowedCharacterSet = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
+    guard language.unicodeScalars.allSatisfy({ allowedCharacterSet.contains($0) }) else {
+        throw Database.Error.invalidArgument(
+            "Invalid language '\(language)': must contain only alphanumeric characters and underscores"
+        )
+    }
+    guard !language.isEmpty else {
+        throw Database.Error.invalidArgument("Language cannot be empty")
+    }
+}
+
 // MARK: - Full-Text Search Database Operations
 
 extension Database.Connection.`Protocol` {
@@ -59,7 +80,8 @@ extension Database.Connection.`Protocol` {
     ///     try await db.createGINIndex(
     ///         on: "articles",
     ///         column: "search_vector",
-    ///         name: "articles_search_idx"
+    ///         name: "articles_search_idx",
+    ///         concurrently: true  // Recommended for production
     ///     )
     /// }
     /// ```
@@ -68,19 +90,22 @@ extension Database.Connection.`Protocol` {
     ///   - table: The table name
     ///   - column: The tsvector column name
     ///   - name: The index name (defaults to "<table>_<column>_idx")
+    ///   - concurrently: Create index without locking table (default: true, recommended for production)
     ///   - ifNotExists: Whether to skip if index already exists (default: true)
     /// - Throws: Database error if index creation fails
     public func createGINIndex(
         on table: String,
         column: String,
         name: String? = nil,
+        concurrently: Bool = true,
         ifNotExists: Bool = true
     ) async throws {
         let indexName = name ?? "\(table)_\(column)_idx"
+        let concurrentlyKeyword = concurrently ? "CONCURRENTLY " : ""
         let notExists = ifNotExists ? "IF NOT EXISTS " : ""
 
         let sql = """
-            CREATE INDEX \(notExists)\(indexName.quoted())
+            CREATE INDEX \(concurrentlyKeyword)\(notExists)\(indexName.quoted())
             ON \(table.quoted())
             USING GIN (\(column.quoted()))
             """
@@ -103,7 +128,8 @@ extension Database.Connection.`Protocol` {
     ///     try await db.createGINIndexOnExpression(
     ///         on: "articles",
     ///         expression: "to_tsvector('english', title || ' ' || body)",
-    ///         name: "articles_fts_idx"
+    ///         name: "articles_fts_idx",
+    ///         concurrently: true
     ///     )
     /// }
     /// ```
@@ -112,19 +138,22 @@ extension Database.Connection.`Protocol` {
     ///   - table: The table name
     ///   - expression: The SQL expression that produces a tsvector
     ///   - name: The index name
+    ///   - concurrently: Create index without locking table (default: true)
     ///   - ifNotExists: Whether to skip if index already exists (default: true)
     /// - Throws: Database error if index creation fails
     public func createGINIndexOnExpression(
         on table: String,
         expression: String,
         name: String,
+        concurrently: Bool = true,
         ifNotExists: Bool = true
     ) async throws {
+        let concurrentlyKeyword = concurrently ? "CONCURRENTLY " : ""
         let notExists = ifNotExists ? "IF NOT EXISTS " : ""
 
         try await execute(
             """
-            CREATE INDEX \(notExists)\(name.quoted())
+            CREATE INDEX \(concurrentlyKeyword)\(notExists)\(name.quoted())
             ON \(table.quoted())
             USING GIN ((\(expression)))
             """
@@ -140,7 +169,8 @@ extension Database.Connection.`Protocol` {
     /// try await db.write { db in
     ///     try await db.createGiSTIndex(
     ///         on: "articles",
-    ///         column: "search_vector"
+    ///         column: "search_vector",
+    ///         concurrently: true
     ///     )
     /// }
     /// ```
@@ -149,19 +179,22 @@ extension Database.Connection.`Protocol` {
     ///   - table: The table name
     ///   - column: The tsvector column name
     ///   - name: The index name (defaults to "<table>_<column>_gist_idx")
+    ///   - concurrently: Create index without locking table (default: true)
     ///   - ifNotExists: Whether to skip if index already exists (default: true)
     /// - Throws: Database error if index creation fails
     public func createGiSTIndex(
         on table: String,
         column: String,
         name: String? = nil,
+        concurrently: Bool = true,
         ifNotExists: Bool = true
     ) async throws {
         let indexName = name ?? "\(table)_\(column)_gist_idx"
+        let concurrentlyKeyword = concurrently ? "CONCURRENTLY " : ""
         let notExists = ifNotExists ? "IF NOT EXISTS " : ""
 
         let sql = """
-            CREATE INDEX \(notExists)\(indexName.quoted())
+            CREATE INDEX \(concurrentlyKeyword)\(notExists)\(indexName.quoted())
             ON \(table.quoted())
             USING GIST (\(column.quoted()))
             """
@@ -331,6 +364,7 @@ extension Database.Connection.`Protocol` {
         language: String = "english",
         type: SearchVectorTriggerType
     ) async throws {
+        try validateLanguage(language)
         let triggerName = "\(table)_\(column)_update"
 
         switch type {
@@ -423,6 +457,7 @@ extension Database.Connection.`Protocol` {
         weightedColumns: [WeightedColumn],
         language: String = "english"
     ) async throws {
+        try validateLanguage(language)
         let vectorExpression = weightedColumns.map { col in
             "setweight(to_tsvector(\(language.quoted(.text)), coalesce(\(col.name.quoted()), '')), \(col.weight.rawValue.quoted(.text)))"
         }.joined(separator: " || ")

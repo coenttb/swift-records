@@ -44,6 +44,12 @@ struct UserService {
 - <doc:HandlingMigrations>
 - <doc:TestingWithRecords>
 
+### Full-Text Search
+
+- <doc:FullTextSearch>
+- <doc:FullTextSearchQuickReference>
+- <doc:FullTextSearchArchitecture>
+
 ### Core Types
 
 - ``Database``

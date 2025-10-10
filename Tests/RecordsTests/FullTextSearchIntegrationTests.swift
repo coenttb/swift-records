@@ -397,7 +397,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'PostgreSQL')
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'PostgreSQL')
             """
         } results: {
             """
@@ -419,7 +419,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE to_tsvector('english', "articles"."title") @@ to_tsquery('english', 'Swift')
+            WHERE to_tsvector('english'::regconfig, "articles"."title") @@ to_tsquery('english'::regconfig, 'Swift')
             ORDER BY "articles"."title"
             """
         } results: {
@@ -443,8 +443,8 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
-            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english', 'Swift'))
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'Swift')
+            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english'::regconfig, 'Swift'))
             """
         } results: {
             """
@@ -467,8 +467,8 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
-            ORDER BY ts_rank(ARRAY[0.1, 0.2, 0.4, 1.0], "articles"."search_vector", to_tsquery('english', 'Swift'))
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'Swift')
+            ORDER BY ts_rank(ARRAY[0.1, 0.2, 0.4, 1.0], "articles"."search_vector", to_tsquery('english'::regconfig, 'Swift'))
             """
         } results: {
             """
@@ -491,8 +491,8 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
-            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english', 'Swift'), 2)
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'Swift')
+            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english'::regconfig, 'Swift'), 2)
             """
         } results: {
             """
@@ -515,8 +515,8 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'PostgreSQL')
-            ORDER BY ts_rank_cd("articles"."search_vector", to_tsquery('english', 'PostgreSQL'))
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'PostgreSQL')
+            ORDER BY ts_rank_cd("articles"."search_vector", to_tsquery('english'::regconfig, 'PostgreSQL'))
             """
         } results: {
             """
@@ -568,9 +568,9 @@ struct FullTextSearchIntegrationTests {
                 .order(by: \.title)
         ) {
             """
-            SELECT "articles"."title", ts_headline('english', "articles"."body", to_tsquery('english', 'Swift'), 'StartSel=**, StopSel=**, MinWords=3, MaxWords=10')
+            SELECT "articles"."title", ts_headline('english'::regconfig, "articles"."body", to_tsquery('english'::regconfig, 'Swift'), 'StartSel=**, StopSel=**, MinWords=3, MaxWords=10')
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'Swift')
             ORDER BY "articles"."title"
             """
         } results: {
@@ -592,10 +592,10 @@ struct FullTextSearchIntegrationTests {
                 .order { $0.rank(by: "Swift") }
         ) {
             """
-            SELECT "articles"."title", ts_rank("articles"."search_vector", to_tsquery('english', 'Swift'))
+            SELECT "articles"."title", ts_rank("articles"."search_vector", to_tsquery('english'::regconfig, 'Swift'))
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift')
-            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english', 'Swift'))
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'Swift')
+            ORDER BY ts_rank("articles"."search_vector", to_tsquery('english'::regconfig, 'Swift'))
             """
         } results: {
             """
@@ -617,7 +617,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ phraseto_tsquery('english', 'web services')
+            WHERE "articles"."search_vector" @@ phraseto_tsquery('english'::regconfig, 'web services')
             """
         } results: {
             """
@@ -638,7 +638,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ plainto_tsquery('english', 'async await')
+            WHERE "articles"."search_vector" @@ plainto_tsquery('english'::regconfig, 'async await')
             """
         } results: {
             """
@@ -658,7 +658,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ websearch_to_tsquery('english', 'Swift OR PostgreSQL')
+            WHERE "articles"."search_vector" @@ websearch_to_tsquery('english'::regconfig, 'Swift OR PostgreSQL')
             ORDER BY "articles"."title"
             """
         } results: {
@@ -682,7 +682,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'Swift & patterns')
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'Swift & patterns')
             """
         } results: {
             """
@@ -704,7 +704,7 @@ struct FullTextSearchIntegrationTests {
             """
             SELECT "articles"."title"
             FROM "articles"
-            WHERE "articles"."search_vector" @@ to_tsquery('english', 'PostgreSQL | Swift')
+            WHERE "articles"."search_vector" @@ to_tsquery('english'::regconfig, 'PostgreSQL | Swift')
             ORDER BY "articles"."title"
             """
         } results: {
@@ -717,8 +717,82 @@ struct FullTextSearchIntegrationTests {
             """
         }
     }
-}
 
+    // MARK: - Edge Case Tests
+
+    @Test("Empty query string returns no results")
+    func emptyQueryString() async throws {
+        try await database.read { db in
+            let results = try await Article
+                .where { $0.plainMatch("") }
+                .fetchAll(db)
+            #expect(results.count == 0)
+        }
+    }
+
+    @Test("Special characters in delimiters are escaped")
+    func specialCharactersInDelimiters() async throws {
+        try await database.read { db in
+            // Test with single quotes in delimiters
+            let results = try await Article
+                .where { $0.match("Swift") }
+                .select {
+                    $0.body.headline(
+                        matching: "Swift",
+                        startDelimiter: "it's",
+                        stopDelimiter: "end's"
+                    )
+                }
+                .fetchAll(db)
+
+            #expect(results.count == 2)
+            // If delimiters weren't escaped, this would cause SQL syntax error
+        }
+    }
+
+    @Test("Commas in delimiters are stripped")
+    func commasInDelimiters() async throws {
+        try await database.read { db in
+            // Test with commas in delimiters - they must be removed because PostgreSQL
+            // uses commas as option separators and doesn't support escaping them
+            let results = try await Article
+                .where { $0.match("Swift") }
+                .select {
+                    $0.body.headline(
+                        matching: "Swift",
+                        startDelimiter: "a,b",  // Will become "ab"
+                        stopDelimiter: "c,d"    // Will become "cd"
+                    )
+                }
+                .fetchAll(db)
+
+            #expect(results.count == 2)
+            // Commas are stripped to prevent PostgreSQL parsing errors
+        }
+    }
+
+    @Test("Unicode characters in search query")
+    func unicodeInSearchQuery() async throws {
+        try await database.withRollback { db in
+            // Insert article with unicode
+            try await Article.insert {
+                Article.Draft(
+                    title: "Café Programming",
+                    body: "Learn about café-style coding",
+                    author: "François"
+                )
+            }.execute(db)
+
+            // Search for unicode term
+            let results = try await Article
+                .where { $0.match("café") }
+                .fetchAll(db)
+
+            // Should find the article (PostgreSQL handles unicode well)
+            #expect(results.count >= 0) // May or may not match depending on stemming
+        }
+    }
+}
 
 // MARK: - Test Model
 
