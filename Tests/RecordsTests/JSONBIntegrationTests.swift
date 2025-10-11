@@ -257,34 +257,24 @@ struct JSONBIntegrationTests {
 
     // MARK: - Modification Operations
 
-    // TODO: concat() has type inference issues in UPDATE - expects String not Data
+    // NOTE: JSONB modification operators (concat, removing, setting, etc.) cannot be used in UPDATE
+    // statements with the current UPDATE DSL design. Inside the UPDATE closure, accessing a JSONB
+    // column like `user.settings` returns the Swift value type (UserSettings), not the TableColumn.
+    // The JSONB operators only exist on TableColumn, and there's no way to access the underlying
+    // TableColumn from within the UPDATE closure for WritableTableColumnExpression columns.
+    //
+    // See JSONB_IMPROVEMENTS.md for details on this architectural limitation.
+
     // @Test("Concatenate JSONB values (||)")
     // func concatenateJSONB() async throws {
+    //     // ❌ This pattern doesn't work: user.settings returns UserSettings (not TableColumn)
     //     try await database.withRollback { db in
-    //         // Add new field to settings
-    //         let newFieldData = try JSONEncoder().encode(["newField": "newValue"])
     //         try await UserProfile
     //             .where { $0.name == "Bob" }
     //             .update { user in
-    //                 user.settings = user.settings.concat(newFieldData)
+    //                 user.settings = user.settings.concat(["newField": "newValue"])
     //             }
     //             .execute(db)
-    //
-    //         // Verify new field exists
-    //         let updated = try await UserProfile
-    //             .where { $0.name == "Bob" }
-    //             .where { $0.settings.hasKey("newField") }
-    //             .fetchAll(db)
-    //
-    //         #expect(updated.count == 1)
-    //
-    //         // Verify original fields still exist
-    //         let stillHasOriginal = try await UserProfile
-    //             .where { $0.name == "Bob" }
-    //             .where { $0.settings.hasAll(of: ["theme", "language", "newField"]) }
-    //             .fetchAll(db)
-    //
-    //         #expect(stillHasOriginal.count == 1)
     //     }
     // }
 
