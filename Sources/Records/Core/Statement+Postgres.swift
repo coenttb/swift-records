@@ -158,7 +158,7 @@ extension SelectStatement where QueryValue == (), Joins == () {
     /// - Returns: The number of rows fetched by the query.
     @inlinable
     public func fetchCount(_ db: any Database.Connection.`Protocol`) async throws -> Int {
-        let query = asSelect().select { _ in .count() }
+        let query = asSelect().select { _ in AggregateFunction<Int>.count() }
         return try await query.fetchOne(db) ?? 0
     }
 }

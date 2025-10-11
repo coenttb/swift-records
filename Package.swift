@@ -18,10 +18,13 @@ let package = Package(
         )
     ],
     dependencies: [
+//        .package(
+//            url: "https://github.com/coenttb/swift-structured-queries-postgres",
+//            from: "0.0.1",
+//            traits: ["StructuredQueriesPostgresTagged"]
+//        ),
         .package(
-            url: "https://github.com/coenttb/swift-structured-queries-postgres",
-            from: "0.0.1",
-            traits: ["StructuredQueriesPostgresTagged"]
+            path: "../swift-structured-queries-postgres"
         ),
         .package(url: "https://github.com/vapor/postgres-nio", from: "1.21.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.10.0"),
@@ -34,7 +37,6 @@ let package = Package(
             name: "Records",
             dependencies: [
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
-//                .product(name: "StructuredQueriesPostgresSupport", package: "swift-structured-queries-postgres"),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "EnvironmentVariables", package: "swift-environment-variables"),
@@ -46,7 +48,6 @@ let package = Package(
             dependencies: [
                 "Records",
                 .product(name: "StructuredQueriesPostgres", package: "swift-structured-queries-postgres"),
-//                .product(name: "StructuredQueriesPostgresSupport", package: "swift-structured-queries-postgres"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "DependenciesTestSupport", package: "swift-dependencies"),
                 .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),

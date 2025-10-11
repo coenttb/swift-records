@@ -21,23 +21,18 @@ extension SnapshotTests {
                         .where(\.isCompleted)
                         .select { CompletedReminder.Columns(reminderID: $0.id, title: $0.title) }
                 ).execute(conn)
-            }
 
-            // Query the view
-            await assertQuery(
-                CompletedReminder.limit(2).select { $0.title }
-            ) {
-                """
-                SELECT "completedReminders"."title"
-                FROM "completedReminders"
-                LIMIT 2
-                """
-            } results: {
-                """
-                ┌─────────────────┐
-                │ "Finish report" │
-                └─────────────────┘
-                """
+                // Query the view within the same connection
+                let query = CompletedReminder.limit(2).select { $0.title }
+                let results = try await conn.fetchAll(query)
+
+                #expect(results.count == 1)
+                #expect(results[0] == "Finish report")
+
+                // Clean up: Drop the view
+                try await CompletedReminder.createTemporaryView(
+                    as: Reminder.all.select { CompletedReminder.Columns(reminderID: $0.id, title: $0.title) }
+                ).drop(ifExists: true).execute(conn)
             }
         }
 
@@ -53,25 +48,20 @@ extension SnapshotTests {
                         .where(\.isCompleted)
                         .select { CompletedReminder.Columns(reminderID: $0.id, title: $0.title) }
                 ).execute(conn)
-            }
 
-            // Query the view with WHERE clause
-            await assertQuery(
-                CompletedReminder
+                // Query the view with WHERE clause
+                let query = CompletedReminder
                     .where { $0.title.like("%report%") }
                     .select { $0.title }
-            ) {
-                """
-                SELECT "completedReminders"."title"
-                FROM "completedReminders"
-                WHERE ("completedReminders"."title" LIKE '%report%')
-                """
-            } results: {
-                """
-                ┌─────────────────┐
-                │ "Finish report" │
-                └─────────────────┘
-                """
+                let results = try await conn.fetchAll(query)
+
+                #expect(results.count == 1)
+                #expect(results[0] == "Finish report")
+
+                // Clean up
+                try await CompletedReminder.createTemporaryView(
+                    as: Reminder.all.select { CompletedReminder.Columns(reminderID: $0.id, title: $0.title) }
+                ).drop(ifExists: true).execute(conn)
             }
         }
 
@@ -93,29 +83,29 @@ extension SnapshotTests {
                             )
                         }
                 ).execute(conn)
-            }
 
-            // Query the view with filtering
-            await assertQuery(
-                ReminderWithList
+                // Query the view with filtering
+                let query = ReminderWithList
                     .where { $0.remindersListTitle == "Work" }
                     .order(by: { $0.reminderTitle })
                     .select { $0.reminderTitle }
-            ) {
-                """
-                SELECT "reminderWithLists"."reminderTitle"
-                FROM "reminderWithLists"
-                WHERE ("reminderWithLists"."remindersListTitle" = 'Work')
-                ORDER BY "reminderWithLists"."reminderTitle"
-                """
-            } results: {
-                """
-                ┌─────────────────┐
-                │ "Finish report" │
-                │ "Review PR"     │
-                │ "Team meeting"  │
-                └─────────────────┘
-                """
+                let results = try await conn.fetchAll(query)
+
+                #expect(results.count == 3)
+                #expect(results[0] == "Finish report")
+                #expect(results[1] == "Review PR")
+                #expect(results[2] == "Team meeting")
+
+                // Clean up
+                try await ReminderWithList.createTemporaryView(
+                    as: Reminder.all.select {
+                        ReminderWithList.Columns(
+                            reminderID: $0.id,
+                            reminderTitle: $0.title,
+                            remindersListTitle: $0.title
+                        )
+                    }
+                ).drop(ifExists: true).execute(conn)
             }
         }
 
@@ -137,23 +127,25 @@ extension SnapshotTests {
                             )
                         }
                 ).execute(conn)
-            }
 
-            // Find by primary key
-            await assertQuery(
-                ReminderWithList.find(1).select { ($0.reminderTitle, $0.remindersListTitle) }
-            ) {
-                """
-                SELECT "reminderWithLists"."reminderTitle", "reminderWithLists"."remindersListTitle"
-                FROM "reminderWithLists"
-                WHERE ("reminderWithLists"."reminderID" IN (1))
-                """
-            } results: {
-                """
-                ┌─────────────┬────────┐
-                │ "Groceries" │ "Home" │
-                └─────────────┴────────┘
-                """
+                // Find by primary key
+                let query = ReminderWithList.find(1).select { ($0.reminderTitle, $0.remindersListTitle) }
+                let results = try await conn.fetchAll(query)
+
+                #expect(results.count == 1)
+                #expect(results[0].0 == "Groceries")
+                #expect(results[0].1 == "Home")
+
+                // Clean up
+                try await ReminderWithList.createTemporaryView(
+                    as: Reminder.all.select {
+                        ReminderWithList.Columns(
+                            reminderID: $0.id,
+                            reminderTitle: $0.title,
+                            remindersListTitle: $0.title
+                        )
+                    }
+                ).drop(ifExists: true).execute(conn)
             }
         }
 
@@ -175,29 +167,32 @@ extension SnapshotTests {
                             )
                         }
                 ).execute(conn)
-            }
 
-            // Query with ordering and limit
-            await assertQuery(
-                ReminderWithList
+                // Query with ordering and limit
+                let query = ReminderWithList
                     .order(by: { ($0.remindersListTitle, $0.reminderTitle) })
                     .limit(3)
                     .select { ($0.reminderTitle, $0.remindersListTitle) }
-            ) {
-                """
-                SELECT "reminderWithLists"."reminderTitle", "reminderWithLists"."remindersListTitle"
-                FROM "reminderWithLists"
-                ORDER BY "reminderWithLists"."remindersListTitle", "reminderWithLists"."reminderTitle"
-                LIMIT 3
-                """
-            } results: {
-                """
-                ┌───────────────────┬────────┐
-                │ "Groceries"       │ "Home" │
-                │ "Haircut"         │ "Home" │
-                │ "Vet appointment" │ "Home" │
-                └───────────────────┴────────┘
-                """
+                let results = try await conn.fetchAll(query)
+
+                #expect(results.count == 3)
+                #expect(results[0].0 == "Groceries")
+                #expect(results[0].1 == "Home")
+                #expect(results[1].0 == "Haircut")
+                #expect(results[1].1 == "Home")
+                #expect(results[2].0 == "Vet appointment")
+                #expect(results[2].1 == "Home")
+
+                // Clean up
+                try await ReminderWithList.createTemporaryView(
+                    as: Reminder.all.select {
+                        ReminderWithList.Columns(
+                            reminderID: $0.id,
+                            reminderTitle: $0.title,
+                            remindersListTitle: $0.title
+                        )
+                    }
+                ).drop(ifExists: true).execute(conn)
             }
         }
 

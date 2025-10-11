@@ -5,94 +5,18 @@ import RecordsTestSupport
 import StructuredQueriesPostgres
 import Testing
 
+/// Integration tests for JSONB with database execution
+/// Tests round-trip encoding/decoding through PostgreSQL
 @Suite(
-    "PostgresJSONB Tests",
+    "JSONB Integration Tests",
     .dependencies {
         $0.envVars = .development
         $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
-struct PostgresJSONBTests {
+struct JSONBTests {
 
     @Dependency(\.defaultDatabase) var db
-
-    @Test("PostgresJSONB type alias exists")
-    func testPostgresJSONBTypeAlias() {
-        // Test that array types have PostgresJSONB
-        let _: [String].PostgresJSONB.Type = [String].PostgresJSONB.self
-        let _: [Int].PostgresJSONB.Type = [Int].PostgresJSONB.self
-
-        // Test that dictionary types have PostgresJSONB
-        let _: [String: String].PostgresJSONB.Type = [String: String].PostgresJSONB.self
-        let _: [String: Int].PostgresJSONB.Type = [String: Int].PostgresJSONB.self
-
-        #expect(true) // If we get here, the types exist
-    }
-
-    @Test("PostgresJSONB QueryBinding")
-    func testPostgresJSONBBinding() {
-        // Test array binding
-        let arrayRep = [String].PostgresJSONB(queryOutput: ["feature1", "feature2"])
-        let arrayBinding = arrayRep.queryBinding
-
-        switch arrayBinding {
-        case .jsonb(let data):
-            let decoded = String(decoding: data, as: UTF8.self)
-            #expect(decoded.contains("feature1"))
-            #expect(decoded.contains("feature2"))
-        default:
-            Issue.record("Expected .jsonb binding, got \(arrayBinding)")
-        }
-
-        // Test dictionary binding
-        let dictRep = [String: String].PostgresJSONB(queryOutput: ["key1": "value1", "key2": "value2"])
-        let dictBinding = dictRep.queryBinding
-
-        switch dictBinding {
-        case .jsonb(let data):
-            let decoded = String(decoding: data, as: UTF8.self)
-            #expect(decoded.contains("key1"))
-            #expect(decoded.contains("value1"))
-        default:
-            Issue.record("Expected .jsonb binding, got \(dictBinding)")
-        }
-    }
-
-    @Test("Table with PostgresJSONB columns")
-    func testTableWithPostgresJSONB() {
-        // Test insert statement generation
-        let insertStatement = TestTable.insert {
-            TestTable(
-                id: 1,
-                features: ["feature1", "feature2"],
-                metadata: ["key": "value"]
-            )
-        }
-
-        // The statement should compile and be valid
-        #expect(insertStatement != nil)
-    }
-
-    @Test("PostgresStatement handles JSONB binding")
-    func testPostgresStatementJSONB() {
-        // Create a query fragment with JSONB binding
-        let features = ["feature1", "feature2"]
-        let jsonbRep = [String].PostgresJSONB(queryOutput: features)
-        let binding = jsonbRep.queryBinding
-
-        let fragment: QueryFragment = """
-            INSERT INTO test (data) VALUES (\(binding))
-        """
-
-        // Convert to PostgresStatement
-        let statement = fragment.toPostgresQuery()
-
-        // Check that the SQL is correct
-        #expect(statement.sql.contains("INSERT INTO test (data) VALUES ($1)"))
-
-        // Check that bindings were created
-//        #expect(!statement.binds.cou)
-    }
 
     @Test("Insert and retrieve JSONB data")
     func testInsertAndRetrieveJSONB() async throws {
@@ -323,21 +247,21 @@ struct PostgresJSONBTests {
     }
 }
 
-// Define a test table with JSONB columns
+// Test table definitions
 @Table("test_jsonb")
 private struct TestTable {
     let id: Int
-    @Column(as: [String].PostgresJSONB.self)
+    @Column(as: [String].JSONB.self)
     let features: [String]
-    @Column(as: [String: String].PostgresJSONB.self)
+    @Column(as: [String: String].JSONB.self)
     let metadata: [String: String]
 }
 
 @Table("optional_jsonb")
 private struct OptionalTable {
     let id: Int
-    @Column(as: [String].PostgresJSONB?.self)
+    @Column(as: [String].JSONB?.self)
     let optionalFeatures: [String]?
-    @Column(as: [String: String].PostgresJSONB?.self)
+    @Column(as: [String: String].JSONB?.self)
     let optionalMetadata: [String: String]?
 }

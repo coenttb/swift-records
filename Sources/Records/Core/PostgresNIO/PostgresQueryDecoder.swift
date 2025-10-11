@@ -25,7 +25,14 @@ public struct PostgresQueryDecoder: QueryDecoder {
       return nil
     }
 
-    // Try to decode as ByteA
+    // Try to decode as JSONB first (PostgreSQL's JSON binary format)
+    // PostgreSQL can return JSONB as a text string in JSON format
+    if let jsonString = try? column.decode(String.self) {
+      // If we got a valid JSON string, convert to UTF-8 bytes
+      return Array(jsonString.utf8)
+    }
+
+    // Fall back to ByteA (PostgreSQL's binary data type)
     if let buffer = try? column.decode(ByteBuffer.self) {
       return Array(buffer.readableBytesView)
     }
