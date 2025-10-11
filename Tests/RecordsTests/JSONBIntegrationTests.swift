@@ -22,16 +22,17 @@ struct JSONBIntegrationTests {
     @Test("Insert and retrieve JSONB data")
     func insertAndRetrieveJSONB() async throws {
         try await database.withRollback { db in
-            // Insert user with JSONB settings
-            let settings: [String: AnyCodable] = [
-                "theme": AnyCodable("dark"),
-                "language": AnyCodable("en"),
-                "notifications": AnyCodable(true)
-            ]
-            let metadata: [String: AnyCodable] = [
-                "lastLogin": AnyCodable("2024-01-15"),
-                "loginCount": AnyCodable(42)
-            ]
+            // Insert user with JSONB settings (using proper Codable structs)
+            let settings = UserSettings(
+                theme: "dark",
+                language: "en",
+                notifications: true
+            )
+            let metadata = UserMetadata(
+                role: "user",
+                created: "2024-01-15",
+                stats: nil
+            )
 
             let inserted = try await UserProfile.insert {
                 UserProfile(
@@ -49,9 +50,10 @@ struct JSONBIntegrationTests {
             let user = inserted[0]
             #expect(user.name == "Alice")
 
-            // Verify JSONB data
-            #expect(user.settings["theme"]?.value as? String == "dark")
-            #expect(user.settings["language"]?.value as? String == "en")
+            // Verify JSONB data (type-safe access)
+            #expect(user.settings.theme == "dark")
+            #expect(user.settings.language == "en")
+            #expect(user.settings.notifications == true)
         }
     }
 
@@ -188,14 +190,25 @@ struct JSONBIntegrationTests {
     @Test("Extract JSONB array element (-> with index)")
     func extractArrayElement() async throws {
         try await database.withRollback { db in
+            // Create temporary table for this test
+            try await db.execute("""
+                CREATE TEMPORARY TABLE temp_user_profiles (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    settings JSONB NOT NULL,
+                    metadata JSONB NOT NULL,
+                    preferences JSONB
+                )
+                """)
+
             // Insert user with tags array
-            let tags = ["swift", "postgres", "jsonb"]
-            let settings: [String: AnyCodable] = ["tags": AnyCodable(tags)]
-            let metadata: [String: AnyCodable] = [:]
-            try await UserProfile.insert {
-                UserProfile(
+            let settings = SettingsWithTags(tags: ["swift", "postgres", "jsonb"])
+            let metadata = UserMetadata(role: "user", created: "2024-01-01", stats: nil)
+
+            try await TempUserProfileWithTags.insert {
+                TempUserProfileWithTags(
                     id: 0,
-                        name: "Eve",
+                    name: "Eve",
                     settings: settings,
                     metadata: metadata,
                     preferences: nil
@@ -206,7 +219,7 @@ struct JSONBIntegrationTests {
             // Note: Can't chain .field("tags").elementAsText(at: 0) because
             // PostgreSQL's ->> operator with integer requires explicit array type.
             // Use path extraction instead: #>> operator handles nested paths correctly.
-            let results = try await UserProfile
+            let results = try await TempUserProfileWithTags
                 .where { $0.name == "Eve" }
                 .select {
                     $0.settings.valueAsText(at: ["tags", "0"])
@@ -340,14 +353,25 @@ struct JSONBIntegrationTests {
     }
 
     @Test("Insert into JSONB array (jsonb_insert)")
-    func tly () async throws {
+    func insertIntoJSONBArray() async throws {
         try await database.withRollback { db in
+            // Create temporary table for this test
+            try await db.execute("""
+                CREATE TEMPORARY TABLE temp_user_profiles_2 (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    settings JSONB NOT NULL,
+                    metadata JSONB NOT NULL,
+                    preferences JSONB
+                )
+                """)
+
             // Create user with tags array
-            let tags = ["swift", "postgres"]
-            let settings: [String: AnyCodable] = ["tags": AnyCodable(tags)]
-            let metadata: [String: AnyCodable] = [:]
-            try await UserProfile.insert {
-                UserProfile(
+            let settings = SettingsWithTags(tags: ["swift", "postgres"])
+            let metadata = UserMetadata(role: "user", created: "2024-01-01", stats: nil)
+
+            try await TempUserProfileForArrayInsert.insert {
+                TempUserProfileForArrayInsert(
                     id: 0,  // Will be auto-generated
                     name: "Frank",
                     settings: settings,
@@ -358,7 +382,7 @@ struct JSONBIntegrationTests {
 
             // TODO: Currently has type inference issues with update operations
             // Insert new tag at position 1
-            // try await UserProfile
+            // try await TempUserProfileForArrayInsert
             //     .where { $0.name == "Frank" }
             //     .update { user in
             //         user.settings = user.settings
@@ -368,7 +392,7 @@ struct JSONBIntegrationTests {
             //     .execute(db)
 
             // Verify insertion
-            let updatedTags = try await UserProfile
+            let updatedTags = try await TempUserProfileForArrayInsert
                 .where { $0.name == "Frank" }
                 .select { $0.settings.field("tags") }
                 .fetchAll(db)
@@ -382,21 +406,28 @@ struct JSONBIntegrationTests {
     @Test("Strip nulls from JSONB (jsonb_strip_nulls)")
     func stripNullsFromJSONB() async throws {
         try await database.withRollback { db in
-            // TODO: Currently has type inference issues with update operations
-            // The strippingNulls() function returns QueryExpression<Data> but
-            // the column expects [String: AnyCodable]
+            // Create temporary table for this test
+            try await db.execute("""
+                CREATE TEMPORARY TABLE temp_user_profiles_3 (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    settings JSONB NOT NULL,
+                    metadata JSONB NOT NULL,
+                    preferences JSONB
+                )
+                """)
 
             // Insert user with null values
-            let settings: [String: AnyCodable] = [
-                "theme": AnyCodable("dark"),
-                "oldField": AnyCodable(NSNull()),
-                "language": AnyCodable("en"),
-                "deprecated": AnyCodable(NSNull())
-            ]
-            let metadata: [String: AnyCodable] = [:]
+            let settings = SettingsWithNullable(
+                theme: "dark",
+                oldField: nil,
+                language: "en",
+                deprecated: nil
+            )
+            let metadata = UserMetadata(role: "user", created: "2024-01-01", stats: nil)
 
-            try await UserProfile.insert {
-                UserProfile(
+            try await TempUserProfileWithNullable.insert {
+                TempUserProfileWithNullable(
                     id: 0,  // Will be auto-generated
                     name: "Grace",
                     settings: settings,
@@ -407,15 +438,17 @@ struct JSONBIntegrationTests {
 
             // TODO: Enable when UPDATE supports JSONB functions
             // Strip nulls
-            // try await UserProfile
+            // try await TempUserProfileWithNullable
             //     .where { $0.name == "Grace" }
             //     .update { user in
             //         user.settings = user.settings.strippingNulls()
             //     }
             //     .execute(db)
 
-            // For now, skip this test due to update API limitations
-            #expect(true) // Placeholder
+            // For now, verify data was inserted
+            let users = try await TempUserProfileWithNullable.where { $0.name == "Grace" }.fetchAll(db)
+            #expect(users.count == 1)
+            #expect(users[0].settings.theme == "dark")
         }
     }
 
@@ -639,20 +672,99 @@ struct JSONBIntegrationTests {
 
 // MARK: - Test Models
 
+/// User settings stored as JSONB
+struct UserSettings: Codable, Equatable, Sendable {
+    var theme: String
+    var language: String?
+    var notifications: Bool?
+}
+
+/// Nested statistics within metadata
+struct MetadataStats: Codable, Equatable, Sendable {
+    var visits: Int
+    var posts: Int
+}
+
+/// User metadata stored as JSONB
+struct UserMetadata: Codable, Equatable, Sendable {
+    var role: String
+    var created: String
+    var stats: MetadataStats?
+}
+
+/// User preferences stored as JSONB (optional)
+struct UserPreferences: Codable, Equatable, Sendable {
+    var betaFeatures: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case betaFeatures = "beta_features"
+    }
+}
+
 @Table("user_profiles")
 struct UserProfile: Codable, Equatable, Identifiable {
     let id: Int
     var name: String
 
-    // Use typed JSONB with dictionary representation
-    @Column(as: [String: AnyCodable].JSONB.self)
-    var settings: [String: AnyCodable]
+    @Column(as: UserSettings.JSONB.self)
+    var settings: UserSettings
 
-    @Column(as: [String: AnyCodable].JSONB.self)
-    var metadata: [String: AnyCodable]
+    @Column(as: UserMetadata.JSONB.self)
+    var metadata: UserMetadata
 
-    @Column(as: [String: AnyCodable].JSONB?.self)
-    var preferences: [String: AnyCodable]?
+    @Column(as: UserPreferences.JSONB?.self)
+    var preferences: UserPreferences?
+}
+
+// MARK: - Temporary Table Models for Array Tests
+
+/// Settings with tags array for array extraction tests
+struct SettingsWithTags: Codable, Equatable, Sendable {
+    var tags: [String]
+}
+
+@Table("temp_user_profiles")
+struct TempUserProfileWithTags: Codable {
+    let id: Int
+    let name: String
+    @Column(as: SettingsWithTags.JSONB.self)
+    var settings: SettingsWithTags
+    @Column(as: UserMetadata.JSONB.self)
+    var metadata: UserMetadata
+    @Column(as: UserPreferences.JSONB?.self)
+    var preferences: UserPreferences?
+}
+
+@Table("temp_user_profiles_2")
+struct TempUserProfileForArrayInsert: Codable {
+    let id: Int
+    let name: String
+    @Column(as: SettingsWithTags.JSONB.self)
+    var settings: SettingsWithTags
+    @Column(as: UserMetadata.JSONB.self)
+    var metadata: UserMetadata
+    @Column(as: UserPreferences.JSONB?.self)
+    var preferences: UserPreferences?
+}
+
+/// Settings with nullable fields for null-stripping tests
+struct SettingsWithNullable: Codable, Equatable, Sendable {
+    var theme: String
+    var oldField: String?
+    var language: String
+    var deprecated: String?
+}
+
+@Table("temp_user_profiles_3")
+struct TempUserProfileWithNullable: Codable {
+    let id: Int
+    let name: String
+    @Column(as: SettingsWithNullable.JSONB.self)
+    var settings: SettingsWithNullable
+    @Column(as: UserMetadata.JSONB.self)
+    var metadata: UserMetadata
+    @Column(as: UserPreferences.JSONB?.self)
+    var preferences: UserPreferences?
 }
 
 // MARK: - Test Database Setup
@@ -716,80 +828,4 @@ extension Database.TestDatabase {
     }
 }
 
-// MARK: - Helper Types
-
-/// Helper for encoding arbitrary values
-struct AnyEncodable: Encodable {
-    private let _encode: (Encoder) throws -> Void
-
-    init<T: Encodable>(_ wrapped: T) {
-        _encode = wrapped.encode
-    }
-
-    func encode(to encoder: Encoder) throws {
-        try _encode(encoder)
-    }
-}
-
-/// Helper for decoding arbitrary values
-struct AnyCodable: Codable {
-    let value: Any
-
-    init(_ value: Any) {
-        self.value = value
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-
-        if container.decodeNil() {
-            self.value = NSNull()
-        } else if let bool = try? container.decode(Bool.self) {
-            self.value = bool
-        } else if let int = try? container.decode(Int.self) {
-            self.value = int
-        } else if let double = try? container.decode(Double.self) {
-            self.value = double
-        } else if let string = try? container.decode(String.self) {
-            self.value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
-            self.value = array.map { $0.value }
-        } else if let dictionary = try? container.decode([String: AnyCodable].self) {
-            self.value = dictionary.mapValues { $0.value }
-        } else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unable to decode value"
-            )
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-
-        switch value {
-        case is NSNull:
-            try container.encodeNil()
-        case let bool as Bool:
-            try container.encode(bool)
-        case let int as Int:
-            try container.encode(int)
-        case let double as Double:
-            try container.encode(double)
-        case let string as String:
-            try container.encode(string)
-        case let array as [Any]:
-            try container.encode(array.map { AnyCodable($0) })
-        case let dictionary as [String: Any]:
-            try container.encode(dictionary.mapValues { AnyCodable($0) })
-        default:
-            throw EncodingError.invalidValue(
-                value,
-                EncodingError.Context(
-                    codingPath: encoder.codingPath,
-                    debugDescription: "Unable to encode value"
-                )
-            )
-        }
-    }
-}
+// AnyCodable removed - use proper Codable types instead (following upstream pattern)
