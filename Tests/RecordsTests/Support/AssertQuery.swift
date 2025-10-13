@@ -1,7 +1,7 @@
 import Dependencies
 import Records
 import RecordsTestSupport
-import StructuredQueriesPostgresCore
+import StructuredQueriesPostgres
 
 /// Convenience wrapper for assertQuery that auto-injects database dependency.
 ///

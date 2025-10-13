@@ -2,7 +2,7 @@ import CustomDump
 import Foundation
 import InlineSnapshotTesting
 import Records
-import StructuredQueriesPostgresCore
+import StructuredQueriesPostgres
 import StructuredQueriesPostgresTestSupport
 
 /// An end-to-end async snapshot testing helper for PostgreSQL statements.
