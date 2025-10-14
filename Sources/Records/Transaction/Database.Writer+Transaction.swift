@@ -30,6 +30,9 @@ extension Database.Writer {
                 return result
             } catch {
                 try await db.execute("ROLLBACK")
+                #if DEBUG
+                Swift.print(String(reflecting: error))
+                #endif
                 throw error
             }
         }
@@ -61,6 +64,9 @@ extension Database.Writer {
                 return result
             } catch {
                 try await db.execute("ROLLBACK")
+                #if DEBUG
+                Swift.print(String(reflecting: error))
+                #endif
                 throw error
             }
         }
@@ -95,12 +101,19 @@ extension Database.Writer {
         isolation: TransactionIsolationLevel? = nil,
         _ block: @Sendable (any Database.Connection.`Protocol`) async throws -> T
     ) async throws -> T {
-        // This method will be overridden by TransactionConnection
-        // For non-transaction connections, start a new transaction
-        return try await withTransaction(
-            isolation: isolation ?? .readCommitted,
-            block
-        )
+        do {
+            // This method will be overridden by TransactionConnection
+            // For non-transaction connections, start a new transaction
+            return try await withTransaction(
+                isolation: isolation ?? .readCommitted,
+                block
+            )
+        } catch {
+            #if DEBUG
+            Swift.print(String(reflecting: error))
+            #endif
+            throw error
+        }
     }
 
     /// Executes a block of operations within a savepoint.
@@ -148,6 +161,9 @@ extension Database.Writer {
                 return result
             } catch {
                 try await db.execute("ROLLBACK TO SAVEPOINT \(savepointName)")
+                #if DEBUG
+                Swift.print(String(reflecting: error))
+                #endif
                 throw error
             }
         }
