@@ -71,12 +71,11 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(reminder.notes == "Important task")
 
             // Cleanup
-            _ = try await db.write { db in
+            try await db.write { db in
                 try await Reminder
                     .find(reminder.id)
                     .delete()
-                    .returning(\.id)
-                    .fetchOne(db)
+                    .execute(db)
             }
         }
         
@@ -139,12 +138,11 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(reminder.dueDate == nil)
 
             // Cleanup
-            _ = try await db.write { db in
+            try await db.write { db in
                 try await Reminder
                     .find(reminder.id)
                     .delete()
-                    .returning(\.id)
-                    .fetchOne(db)
+                    .execute(db)
             }
         }
         
@@ -215,12 +213,11 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(fetched?.notes == "Test notes")
 
             // Cleanup
-            _ = try await db.write { db in
+            try await db.write { db in
                 try await Reminder
                     .find(insertedId)
                     .delete()
-                    .returning(\.id)
-                    .fetchOne(db)
+                    .execute(db)
             }
         }
         
@@ -277,12 +274,11 @@ extension SnapshotIntegrationTests.Execution.Insert {
             
             // Cleanup
             let ids = inserted.map { $0.id }
-            _ = try await db.write { db in
+            try await db.write { db in
                 try await Reminder
                     .find(ids)
                     .delete()
-                    .returning(\.id)
-                    .fetchAll(db)
+                    .execute(db)
             }
         }
         
@@ -314,12 +310,11 @@ extension SnapshotIntegrationTests.Execution.Insert {
             }
 
             // Cleanup
-            _ = try await db.write { db in
+            try await db.write { db in
                 try await Reminder
                     .find(reminder.id)
                     .delete()
-                    .returning(\.id)
-                    .fetchOne(db)
+                    .execute(db)
             }
         }
 
@@ -347,12 +342,11 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(count.count >= 1)
 
             // Cleanup
-            _ = try await db.write { db in
+            try await db.write { db in
                 try await Reminder
                     .where { $0.title == uniqueTitle }
                     .delete()
-                    .returning(\.id)
-                    .fetchAll(db)
+                    .execute(db)
             }
         }
     }
