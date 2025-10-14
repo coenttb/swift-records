@@ -9,7 +9,7 @@ extension Database {
         let postgres: PostgresConnection
         let logger: Logger
 
-        init(_ postgres: PostgresConnection, logger: Logger? = nil) {
+        package init(_ postgres: PostgresConnection, logger: Logger? = nil) {
             self.postgres = postgres
             self.logger = logger ?? Logger(label: "records.connection")
         }

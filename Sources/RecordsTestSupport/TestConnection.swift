@@ -3,7 +3,7 @@ import Logging
 import NIOCore
 import NIOPosix
 import PostgresNIO
-@testable import Records
+import Records
 
 /// Global EventLoopGroup for all test clients
 /// Following PostgresNIO's pattern: one shared EventLoopGroup, shutdown in teardown

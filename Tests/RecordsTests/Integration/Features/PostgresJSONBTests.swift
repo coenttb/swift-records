@@ -1,6 +1,6 @@
 import Dependencies
 import Foundation
-@testable import Records
+import Records
 import RecordsTestSupport
 import StructuredQueriesPostgres
 import Testing

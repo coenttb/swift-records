@@ -3,7 +3,7 @@ import DependenciesTestSupport
 import EnvironmentVariables
 import Foundation
 import PostgresNIO
-@testable import Records
+import Records
 import Testing
 
 @Suite(

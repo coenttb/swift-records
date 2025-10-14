@@ -113,7 +113,8 @@ struct TransactionTests {
                 } values: {
                     ("Rollback Test", Decimal(500))
                 }
-                .execute(db)
+                .returning(\.id)
+                .fetchOne(db)
 
                 throw TestError.intentionalRollback
             }
@@ -156,7 +157,8 @@ struct TransactionTests {
                     } values: {
                         ("Account 2", Decimal(2000))
                     }
-                    .execute(db)
+                    .returning(\.id)
+                    .fetchOne(db)
 
                     throw TestError.intentionalRollback
                 }
@@ -171,7 +173,8 @@ struct TransactionTests {
             } values: {
                 ("Account 3", Decimal(3000))
             }
-            .execute(db)
+            .returning(\.id)
+            .fetchOne(db)
         }
 
         // Verify only accounts 1 and 3 were committed
@@ -303,7 +306,7 @@ struct TransactionTests {
             try await db.execute("DELETE FROM test_accounts")
         }
 
-        let (outerAccountId, innerAccountId) = try await db.withTransaction { outerDb -> (Int, Int?) in
+        let (outerAccountId, _) = try await db.withTransaction { outerDb -> (Int, Int?) in
             let outerAccount = try await Account.insert {
                 ($0.name, $0.balance)
             } values: {

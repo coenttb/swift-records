@@ -33,8 +33,8 @@ struct DeleteExecutionTests {
         #expect(before != nil)
 
         // Delete
-        try await db.write { db in
-            try await Reminder.where { $0.id == id }.delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.where { $0.id == id }.delete().returning(\.id).fetchOne(db)
         }
 
         // Verify deleted
@@ -147,8 +147,8 @@ struct DeleteExecutionTests {
         #expect(insertedReminders.count == 3)
 
         // Delete the list (should cascade to reminders)
-        try await db.write { db in
-            try await RemindersList.where { $0.id == listId }.delete().execute(db)
+        _ = try await db.write { db in
+            try await RemindersList.where { $0.id == listId }.delete().returning(\.id).fetchOne(db)
         }
 
         // Verify list is deleted
@@ -245,8 +245,8 @@ struct DeleteExecutionTests {
         let id = try #require(inserted.first?.id)
 
         // Delete using find()
-        try await db.write { db in
-            try await Reminder.find(id).delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.find(id).delete().returning(\.id).fetchOne(db)
         }
 
         // Verify deleted

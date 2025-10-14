@@ -94,7 +94,7 @@ extension QueryFragment {
             bindings.append(values, context: .default)
         case .dateArray(let values):
             bindings.append(values, context: .default)
-        case .genericArray(let elementBindings):
+        case .genericArray:
             // For generic arrays, we need to recursively append each binding
             // However, PostgreSQL doesn't support heterogeneous arrays, so we need to
             // convert all elements to a compatible type. This is complex and requires

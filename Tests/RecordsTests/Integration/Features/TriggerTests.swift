@@ -57,7 +57,7 @@ struct TriggerTests {
 
         // Create a trigger that sets position on insert
         try await db.write { db in
-            // Use createTriggerFunction helper for PostgreSQL-specific function
+            // Use createTrigger.Function helper for PostgreSQL-specific function
             try await db.createTriggerFunction(
                 "set_default_position",
                 body: """
@@ -78,8 +78,8 @@ struct TriggerTests {
         }
 
         // Insert items without setting position
-        try await db.write { db in
-            for name in ["First", "Second", "Third"] {
+        for name in ["First", "Second", "Third"] {
+            try await db.write { db in
                 try await Item.insert {
                     Item.Draft(name: name)
                 }.execute(db)

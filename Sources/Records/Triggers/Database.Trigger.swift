@@ -44,7 +44,7 @@ extension Database.Connection.`Protocol` {
     /// ## Example
     /// 
     /// ```swift
-    /// try await db.createTriggerFunction(
+    /// try await db.createTrigger.Function(
     ///     "update_timestamp",
     ///     body: "NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW;"
     /// )

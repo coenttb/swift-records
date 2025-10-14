@@ -45,8 +45,8 @@ struct ExecutionUpdateTests {
         #expect(results.first?.isCompleted == true)
 
         // Cleanup
-        try await db.write { db in
-            try await Reminder.find(id).delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.find(id).delete().returning{ $0.id }.fetchOne(db)
         }
     }
 
@@ -69,11 +69,12 @@ struct ExecutionUpdateTests {
         #expect(inserted.first?.assignedUserID == 1)
 
         // Update to set assignedUserID to nil
-        try await db.write { db in
+        _ = try await db.write { db in
             try await Reminder
                 .where { $0.id == id }
                 .update { $0.assignedUserID = nil }
-                .execute(db)
+                .returning{ $0.id }
+                .fetchOne(db)
         }
 
         // Verify with SELECT
@@ -85,8 +86,8 @@ struct ExecutionUpdateTests {
         #expect(reminder?.assignedUserID == nil)
 
         // Cleanup
-        try await db.write { db in
-            try await Reminder.find(id).delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.find(id).delete().returning{ $0.id }.fetchOne(db)
         }
     }
 
@@ -125,8 +126,8 @@ struct ExecutionUpdateTests {
         #expect(results.first?.notes == "Completed")
 
         // Cleanup
-        try await db.write { db in
-            try await Reminder.find(id).delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.find(id).delete().returning{ $0.id }.fetchOne(db)
         }
     }
 
@@ -183,8 +184,8 @@ struct ExecutionUpdateTests {
         #expect(results.allSatisfy { $0.isFlagged == true })
 
         // Cleanup (list deletion cascades to reminders)
-        try await db.write { db in
-            try await RemindersList.find(listId).delete().execute(db)
+        _ = try await db.write { db in
+            try await RemindersList.find(listId).delete().returning{ $0.id }.fetchOne(db)
         }
     }
 
@@ -220,8 +221,8 @@ struct ExecutionUpdateTests {
         #expect(results.allSatisfy { $0.isFlagged == false })
 
         // Cleanup
-        try await db.write { db in
-            try await Reminder.where { $0.title.ilike("\(marker)-%") }.delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.where { $0.title.ilike("\(marker)-%") }.delete().returning{ $0.id }.fetchAll(db)
         }
     }
 
@@ -255,8 +256,8 @@ struct ExecutionUpdateTests {
         #expect(updated?.isCompleted == true)
 
         // Cleanup
-        try await db.write { db in
-            try await Reminder.find(id).delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder.find(id).delete().returning{ $0.id }.fetchOne(db)
         }
     }
 
@@ -278,11 +279,12 @@ struct ExecutionUpdateTests {
         let id = try #require(inserted.first?.id)
 
         // Update with text concatenation (SQL + operator translates to ||)
-        try await db.write { db in
+        _ = try await db.write { db in
             try await Reminder
                 .where { $0.id == id }
                 .update { $0.notes = $0.notes + " - Updated" }
-                .execute(db)
+                .returning{ $0.id }
+                .fetchOne(db)
         }
 
         // Verify with SELECT
@@ -294,8 +296,12 @@ struct ExecutionUpdateTests {
         #expect(reminder?.notes == "Original text - Updated")
 
         // Cleanup
-        try await db.write { db in
-            try await Reminder.find(id).delete().execute(db)
+        _ = try await db.write { db in
+            try await Reminder
+                .find(id)
+                .delete()
+                .returning{ $0.id }
+                .fetchOne(db)
         }
     }
 }

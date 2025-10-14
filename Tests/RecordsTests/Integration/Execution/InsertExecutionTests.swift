@@ -69,10 +69,14 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(reminder.priority == .high)
             #expect(reminder.isFlagged == true)
             #expect(reminder.notes == "Important task")
-            
+
             // Cleanup
-            try await db.write { db in
-                try await Reminder.find(reminder.id).delete().execute(db)
+            _ = try await db.write { db in
+                try await Reminder
+                    .find(reminder.id)
+                    .delete()
+                    .returning(\.id)
+                    .fetchOne(db)
             }
         }
         
@@ -133,10 +137,14 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(reminder.assignedUserID == nil)
             #expect(reminder.priority == nil)
             #expect(reminder.dueDate == nil)
-            
+
             // Cleanup
-            try await db.write { db in
-                try await Reminder.find(reminder.id).delete().execute(db)
+            _ = try await db.write { db in
+                try await Reminder
+                    .find(reminder.id)
+                    .delete()
+                    .returning(\.id)
+                    .fetchOne(db)
             }
         }
         
@@ -205,10 +213,14 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(fetched != nil)
             #expect(fetched?.title == "Verify test")
             #expect(fetched?.notes == "Test notes")
-            
+
             // Cleanup
-            try await db.write { db in
-                try await Reminder.find(insertedId).delete().execute(db)
+            _ = try await db.write { db in
+                try await Reminder
+                    .find(insertedId)
+                    .delete()
+                    .returning(\.id)
+                    .fetchOne(db)
             }
         }
         
@@ -264,9 +276,13 @@ extension SnapshotIntegrationTests.Execution.Insert {
             #expect(inserted[1].remindersListID == 2)
             
             // Cleanup
-            let ids = inserted.map(\.id)
-            try await db.write { db in
-                try await Reminder.find(ids).delete().execute(db)
+            let ids = inserted.map { $0.id }
+            _ = try await db.write { db in
+                try await Reminder
+                    .find(ids)
+                    .delete()
+                    .returning(\.id)
+                    .fetchAll(db)
             }
         }
         
@@ -296,13 +312,17 @@ extension SnapshotIntegrationTests.Execution.Insert {
                 let retrievedComponents = calendar.dateComponents([.year, .month, .day], from: dueDate)
                 #expect(insertedComponents == retrievedComponents)
             }
-            
+
             // Cleanup
-            try await db.write { db in
-                try await Reminder.find(reminder.id).delete().execute(db)
+            _ = try await db.write { db in
+                try await Reminder
+                    .find(reminder.id)
+                    .delete()
+                    .returning(\.id)
+                    .fetchOne(db)
             }
         }
-        
+
         @Test("INSERT without RETURNING")
         func insertWithoutReturning() async throws {
             // Use unique title for cleanup
@@ -325,10 +345,14 @@ extension SnapshotIntegrationTests.Execution.Insert {
             }
             
             #expect(count.count >= 1)
-            
+
             // Cleanup
-            try await db.write { db in
-                try await Reminder.where { $0.title == uniqueTitle }.delete().execute(db)
+            _ = try await db.write { db in
+                try await Reminder
+                    .where { $0.title == uniqueTitle }
+                    .delete()
+                    .returning(\.id)
+                    .fetchAll(db)
             }
         }
     }

@@ -63,7 +63,7 @@ struct DraftInsertTests {
                     notes: "Test note"
                 )
             }
-            .returning { $0 }
+            .returning(\.self)
             .fetchOne(db)
         }
 
@@ -97,7 +97,7 @@ struct DraftInsertTests {
                     notes: nil
                 )
             }
-            .returning { $0 }
+            .returning(\.self)
             .fetchOne(db)
         }
 
@@ -146,7 +146,7 @@ struct DraftInsertTests {
                     row.uniqueVisitors = excluded.uniqueVisitors
                     row.notes = excluded.notes
                 }
-                .returning { $0 }
+                .returning(\.self)
                 .fetchOne(db)
             }
 
@@ -201,7 +201,7 @@ struct DraftInsertTests {
                     notes: "Third"
                 )
             }
-            .returning { $0 }
+            .returning(\.self)
             .fetchAll(db)
         }
 
@@ -250,7 +250,7 @@ struct DraftInsertTests {
                         notes: "Auto ID"
                     )
                 }
-                .returning { $0 }
+                .returning(\.self)
                 .fetchAll(db)
             }
 
@@ -261,8 +261,7 @@ struct DraftInsertTests {
             #expect(insertedRecords[0].id == explicitId)
             #expect(insertedRecords[0].notes == "Explicit ID")
 
-            // Second should have auto-generated ID
-            #expect(insertedRecords[1].id != nil)
+            // Second should have auto-generated ID (different from explicit)
             #expect(insertedRecords[1].id != explicitId)
             #expect(insertedRecords[1].notes == "Auto ID")
         } catch {
@@ -332,7 +331,7 @@ struct DraftInsertTests {
                     row.views = excluded.views
                     row.uniqueVisitors = excluded.uniqueVisitors
                 }
-                .returning { $0 }
+                .returning(\.self)
                 .fetchOne(db)
             }
 
