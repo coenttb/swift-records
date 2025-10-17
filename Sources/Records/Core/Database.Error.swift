@@ -30,6 +30,18 @@ extension Database {
         /// Invalid configuration provided.
         case invalidConfiguration(message: String)
 
+        /// Invalid notification channel specification.
+        case invalidNotificationChannels(String)
+
+        /// Notification feature is not supported on this connection type.
+        case notificationNotSupported(String)
+
+        /// Invalid notification payload.
+        case invalidNotificationPayload(String)
+
+        /// Failed to decode notification payload.
+        case notificationDecodingFailed(type: String, payload: String, underlying: Swift.Error)
+
         public var errorDescription: String? {
             switch self {
             case .poolShuttingDown:
@@ -58,6 +70,18 @@ extension Database {
 
             case .invalidConfiguration(let message):
                 return "Invalid database configuration: \(message)"
+
+            case .invalidNotificationChannels(let message):
+                return "Invalid notification channels: \(message)"
+
+            case .notificationNotSupported(let message):
+                return "Notifications not supported: \(message)"
+
+            case .invalidNotificationPayload(let message):
+                return "Invalid notification payload: \(message)"
+
+            case .notificationDecodingFailed(let type, let payload, let error):
+                return "Failed to decode notification payload as \(type). Payload: '\(payload)'. Error: \(error.localizedDescription)"
             }
         }
     }
