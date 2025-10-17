@@ -42,6 +42,9 @@ extension Database {
         /// Failed to decode notification payload.
         case notificationDecodingFailed(type: String, payload: String, underlying: Swift.Error)
 
+        /// Notification payload exceeds PostgreSQL size limit.
+        case notificationPayloadTooLarge(size: Int, limit: Int, hint: String)
+
         public var errorDescription: String? {
             switch self {
             case .poolShuttingDown:
@@ -82,6 +85,9 @@ extension Database {
 
             case .notificationDecodingFailed(let type, let payload, let error):
                 return "Failed to decode notification payload as \(type). Payload: '\(payload)'. Error: \(error.localizedDescription)"
+
+            case .notificationPayloadTooLarge(let size, let limit, let hint):
+                return "Notification payload size (\(size) bytes) exceeds PostgreSQL limit (\(limit) bytes). \(hint)"
             }
         }
     }

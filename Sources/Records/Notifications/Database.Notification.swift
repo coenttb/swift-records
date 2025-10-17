@@ -19,7 +19,7 @@ extension Database {
     ///     print("Payload: \(notification.payload)")
     /// }
     /// ```
-    public struct Notification: Sendable, Hashable, Codable {
+    public struct Notification: Sendable, Hashable {
         /// The type-safe channel name on which the notification was sent.
         ///
         /// This is a `ChannelName` (Tagged type) that guarantees the identifier is valid.

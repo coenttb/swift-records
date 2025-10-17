@@ -7,66 +7,10 @@ extension Database {
     ///
     /// This type is used internally to feed the public `NotificationStream<Payload>`.
     /// Users should use the typed notification APIs instead.
-    struct RawNotificationStream: AsyncSequence, Sendable {
-        public typealias Element = Notification
-
-        // The type of error this sequence can throw - uses Swift.Error protocol
-        public typealias Failure = any Swift.Error
-
-        private let _makeIterator: @Sendable () -> AsyncIterator
-
-        init(
-            stream: AsyncThrowingStream<Notification, any Swift.Error>,
-            cleanup: @escaping @Sendable () async -> Void
-        ) {
-            self._makeIterator = {
-                AsyncIterator(
-                    base: stream.makeAsyncIterator(),
-                    cleanup: cleanup
-                )
-            }
-        }
-
-        public func makeAsyncIterator() -> AsyncIterator {
-            _makeIterator()
-        }
-
-        public struct AsyncIterator: AsyncIteratorProtocol {
-            private var base: AsyncThrowingStream<Notification, any Swift.Error>.AsyncIterator
-            private let cleanup: @Sendable () async -> Void
-            private var didCleanup = false
-
-            init(
-                base: AsyncThrowingStream<Notification, any Swift.Error>.AsyncIterator,
-                cleanup: @escaping @Sendable () async -> Void
-            ) {
-                self.base = base
-                self.cleanup = cleanup
-            }
-
-            public mutating func next() async throws -> Notification? {
-                do {
-                    if let notification = try await base.next() {
-                        return notification
-                    } else {
-                        // Stream ended naturally
-                        await performCleanup()
-                        return nil
-                    }
-                } catch {
-                    // Error occurred, cleanup and rethrow
-                    await performCleanup()
-                    throw error
-                }
-            }
-
-            private mutating func performCleanup() async {
-                guard !didCleanup else { return }
-                didCleanup = true
-                await cleanup()
-            }
-        }
-    }
+    ///
+    /// This is a simple typealias because AsyncThrowingStream handles cleanup automatically
+    /// via its `onTermination` callback - no manual lifecycle management needed.
+    typealias RawNotificationStream = AsyncThrowingStream<Notification, any Swift.Error>
 
     /// A stream of typed notifications with automatic JSON decoding.
     ///
@@ -91,10 +35,10 @@ extension Database {
     public struct NotificationStream<Payload: Decodable & Sendable>: AsyncSequence, Sendable {
         public typealias Element = Payload
 
-        private let base: RawNotificationStream
+        private let base: AsyncThrowingStream<Notification, any Swift.Error>
         private let decoder: JSONDecoder
 
-        init(base: RawNotificationStream, decoder: JSONDecoder = JSONDecoder()) {
+        init(base: AsyncThrowingStream<Notification, any Swift.Error>, decoder: JSONDecoder = JSONDecoder()) {
             self.base = base
             self.decoder = decoder
         }
@@ -104,10 +48,10 @@ extension Database {
         }
 
         public struct AsyncIterator: AsyncIteratorProtocol {
-            private var base: RawNotificationStream.AsyncIterator
+            private var base: AsyncThrowingStream<Notification, any Swift.Error>.AsyncIterator
             private let decoder: JSONDecoder
 
-            init(base: RawNotificationStream.AsyncIterator, decoder: JSONDecoder) {
+            init(base: AsyncThrowingStream<Notification, any Swift.Error>.AsyncIterator, decoder: JSONDecoder) {
                 self.base = base
                 self.decoder = decoder
             }
@@ -142,8 +86,9 @@ extension Database {
 extension Database.Reader {
     /// Listens for typed notifications with automatic JSON decoding.
     ///
-    /// This method is similar to `notifications(channel:)` but automatically
-    /// decodes JSON payloads into the specified Codable type.
+    /// This method returns immediately with a stream. The PostgreSQL LISTEN command
+    /// executes asynchronously in the background. Use `for await _ in ready { break }`
+    /// to wait until listening is active before sending notifications.
     ///
     /// ## Example
     ///
@@ -154,25 +99,33 @@ extension Database.Reader {
     ///     let title: String
     /// }
     ///
-    /// let channel = try ChannelName(validating: "reminders")
-    /// for try await change: ReminderChange in try await db.notifications(channel: channel) {
-    ///     print("Reminder \(change.id): \(change.action) - \(change.title)")
+    /// let (stream, ready) = try await db.notifications(on: channel, expecting: ReminderChange.self)
+    ///
+    /// Task {
+    ///     for try await change in stream {
+    ///         print("Reminder \(change.id): \(change.action) - \(change.title)")
+    ///     }
     /// }
+    ///
+    /// // Wait for LISTEN to complete
+    /// for await _ in ready { break }
+    ///
+    /// // Now safe to send
+    /// try await db.notify(channel: channel, payload: myChange)
     /// ```
     ///
     /// - Parameters:
     ///   - channel: The type-safe PostgreSQL channel name to listen on
-    ///   - type: The Codable type to decode payloads into
+    ///   - type: The Codable type to decode payloads into (can be inferred from context)
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: An AsyncSequence that yields decoded payloads
+    /// - Returns: A tuple of (notification stream, readiness signal)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notifications<Payload: Decodable & Sendable>(
-        channel: ChannelName,
-        as type: Payload.Type = Payload.self,
+        on channel: ChannelName,
+        expecting type: Payload.Type = Payload.self,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> Database.NotificationStream<Payload> {
-        let stream = try await _notifications(channels: [channel.rawValue])
-        return Database.NotificationStream(base: stream, decoder: decoder)
+    ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
+        try await _notifications(channel: channel.rawValue, decoder: decoder)
     }
 
     // MARK: - Type-Safe Channel API
@@ -191,22 +144,27 @@ extension Database.Reader {
     /// }
     ///
     /// let channel: Database.Notification.Channel<UserEvent> = "user_events"
+    /// let (stream, ready) = try await db.notifications(on: channel)
     ///
-    /// for try await event in try await db.notifications(channel: channel) {
-    ///     print("User \(event.userID) performed: \(event.action)")
+    /// Task {
+    ///     for try await event in stream {
+    ///         print("User \(event.userID) performed: \(event.action)")
+    ///     }
     /// }
+    ///
+    /// for await _ in ready { break }
     /// ```
     ///
     /// - Parameters:
     ///   - channel: A type-safe channel that couples the name with the payload type
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: An AsyncSequence that yields decoded payloads
+    /// - Returns: A tuple of (notification stream, readiness signal)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notifications<Payload>(
-        channel: Database.Notification.Channel<Payload>,
+        on channel: Database.Notification.Channel<Payload>,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> Database.NotificationStream<Payload> {
-        try await notifications(channel: channel.name, as: Payload.self, decoder: decoder)
+    ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
+        try await notifications(on: channel.name, expecting: Payload.self, decoder: decoder)
     }
 
     /// Listens for notifications using a notification channel schema.
@@ -226,114 +184,121 @@ extension Database.Reader {
     ///     }
     /// }
     ///
-    /// for try await event in try await db.notifications(schema: UserEventsChannel.self) {
-    ///     print("User \(event.userID) performed: \(event.action)")
+    /// let (stream, ready) = try await db.notifications(from: UserEventsChannel.self)
+    ///
+    /// Task {
+    ///     for try await event in stream {
+    ///         print("User \(event.userID) performed: \(event.action)")
+    ///     }
     /// }
+    ///
+    /// for await _ in ready { break }
     /// ```
     ///
     /// - Parameters:
     ///   - schema: The notification channel schema type
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: An AsyncSequence that yields decoded payloads
+    /// - Returns: A tuple of (notification stream, readiness signal)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notifications<Schema: Database.Notification.ChannelSchema>(
-        schema: Schema.Type,
+        from schema: Schema.Type,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> Database.NotificationStream<Schema.Payload> {
-        try await notifications(channel: Schema.channelName, as: Schema.Payload.self, decoder: decoder)
+    ) async throws -> (stream: Database.NotificationStream<Schema.Payload>, ready: AsyncStream<Void>) {
+        try await notifications(on: Schema.channelName, expecting: Schema.Payload.self, decoder: decoder)
     }
 
-    /// Internal implementation of notification listening.
+    /// Internal implementation with readiness signaling.
     ///
-    /// This method handles the core logic:
-    /// 1. Acquires a dedicated connection
-    /// 2. Executes LISTEN for each channel
-    /// 3. Sets up the notification handler via postgres-nio
-    /// 4. Returns an AsyncSequence backed by AsyncThrowingStream
-    /// 5. Cleans up (UNLISTEN, close connection) when stream ends
-    ///
-    /// Note: This method will be implemented differently for PostgresClient vs other database types.
-    /// For now, we provide a basic implementation that requires PostgresClient.
-    private func _notifications(
-        channels: [String]
-    ) async throws -> Database.RawNotificationStream {
-        guard !channels.isEmpty else {
-            throw Database.Error.invalidNotificationChannels("At least one channel required")
-        }
+    /// Returns both the notification stream and a readiness signal that yields
+    /// once when the LISTEN command completes successfully. The stream is returned
+    /// immediately, and LISTEN executes asynchronously.
+    private func _notifications<Payload: Decodable & Sendable>(
+        channel: String,
+        decoder: JSONDecoder
+    ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
 
-        // We need to cast to PostgresClient to get a dedicated connection
-        guard let client = self as? PostgresClient else {
+        // Try to get PostgresClient - either directly or via NotificationCapable wrapper
+        let client: PostgresClient
+        if let directClient = self as? PostgresClient {
+            client = directClient
+        } else if let capable = self as? NotificationCapable,
+                  let postgresClient = try await capable.postgresClient {
+            client = postgresClient
+        } else {
             throw Database.Error.notificationNotSupported(
                 "Notifications currently only supported on PostgresClient. Found: \(type(of: self))"
             )
         }
 
-        // Create the stream - let the compiler infer 'any Error'
-        let (stream, continuation) = AsyncThrowingStream.makeStream(
-            of: Database.Notification.self,
-            bufferingPolicy: .unbounded  // Buffer notifications so we don't drop any
-        )
+        // Create readiness signal channel
+        let (readyStream, readyContinuation) = AsyncStream.makeStream(of: Void.self)
 
-        // We need to get a dedicated connection and hold it for the lifetime of the stream
-        // We'll do this in a detached task that runs until the stream is finished
-        let listenerTask = Task.detached {
-            do {
-                try await client.withConnection { postgres in
-                    // Set up notification handler
-                    let listenerContext = postgres.addListener(channel: channels.first!) { _, notification in
-                        // Convert PostgresNIO notification to our typed notification
-                        let dbNotification = Database.Notification(
-                            channel: ChannelName(tableName: notification.channel),
-                            payload: notification.payload,
-                            backendPID: notification.backendPID
-                        )
-                        continuation.yield(dbNotification)
-                    }
+        // Create the notification stream with structured concurrency
+        let notificationStream = AsyncThrowingStream<Database.Notification, any Swift.Error> { continuation in
+            // This task is tied to the stream's lifetime via onTermination
+            let listenerTask = Task {
+                do {
+                    try await client.withConnection { postgres in
+                        // Set up notification handler FIRST (before LISTEN)
+                        let listenerContext = postgres.addListener(channel: channel) { _, notification in
+                            // Convert PostgresNIO notification to our typed notification
+                            do {
+                                let dbNotification = try Database.Notification(
+                                    rawChannel: notification.channel,
+                                    payload: notification.payload,
+                                    backendPID: notification.backendPID
+                                )
+                                continuation.yield(dbNotification)
+                            } catch {
+                                // Invalid channel name from PostgreSQL (shouldn't happen)
+                                continuation.finish(throwing: error)
+                            }
+                        }
 
-                    // Execute LISTEN for each channel
-                    let connection = Database.Connection(postgres)
-                    for channelStr in channels {
-                        // Channel names from _notifications are already validated rawValue strings
-                        let channel = try ChannelName(validating: channelStr)
-                        try await connection.execute("LISTEN \(channel.quoted)")
-                    }
+                        // Execute LISTEN command
+                        let connection = Database.Connection(postgres)
+                        let channelName = try ChannelName(validating: channel)
+                        try await connection.execute("LISTEN \(channelName.quoted)")
 
-                    // Keep the connection alive by waiting for cancellation
-                    // When the stream is cancelled, this task will be cancelled too
-                    try await withTaskCancellationHandler {
-                        // Wait indefinitely - use a very long duration
-                        try await Task.sleep(for: .seconds(Double.greatestFiniteMagnitude))
-                    } onCancel: {
-                        // Clean up when cancelled
+                        // ✅ LISTEN complete - signal readiness!
+                        readyContinuation.yield(())
+                        readyContinuation.finish()
+
+                        // Keep the connection alive indefinitely until cancelled
+                        // This will be cancelled when the stream consumer stops iterating
+                        try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
+                            // Never resume - only cancelled via task cancellation
+                        }
+
+                        // If we reach here (task was cancelled), clean up
                         listenerContext.stop()
 
-                        // Execute UNLISTEN for each channel
-                        Task {
-                            for channelStr in channels {
-                                if let channel = try? ChannelName(validating: channelStr) {
-                                    try? await connection.execute("UNLISTEN \(channel.quoted)")
-                                }
-                            }
-                            continuation.finish()
+                        do {
+                            try await connection.execute("UNLISTEN \(channelName.quoted)")
+                        } catch {
+                            // Log cleanup errors - don't swallow them
+                            print("⚠️ Failed to UNLISTEN channel '\(channel)': \(error)")
                         }
+
+                        continuation.finish()
                     }
+                } catch {
+                    // If LISTEN fails, signal error on readiness too
+                    readyContinuation.finish()
+                    continuation.finish(throwing: error)
                 }
-            } catch {
-                continuation.finish(throwing: error)
+            }
+
+            // Cleanup happens automatically when stream consumer stops iterating
+            continuation.onTermination = { @Sendable _ in
+                listenerTask.cancel()
             }
         }
 
-        // Create cleanup closure that cancels the listener task
-        let cleanup: @Sendable () async -> Void = {
-            listenerTask.cancel()
-            // Give it a moment to clean up
-            try? await Task.sleep(for: .milliseconds(100))
-        }
+        // Wrap raw stream with typed decoder
+        let typedStream = Database.NotificationStream<Payload>(base: notificationStream, decoder: decoder)
 
-        return Database.RawNotificationStream(
-            stream: stream,
-            cleanup: cleanup
-        )
+        return (typedStream, readyStream)
     }
 }
 
@@ -386,6 +351,9 @@ extension Database.Writer {
     /// This method encodes a Codable value to JSON and sends it as a notification
     /// payload. This is the recommended way to send structured data.
     ///
+    /// **PostgreSQL Limit**: NOTIFY payloads have a maximum size of 8000 bytes.
+    /// This method validates payload size and throws a helpful error if exceeded.
+    ///
     /// ## Example
     ///
     /// ```swift
@@ -405,7 +373,7 @@ extension Database.Writer {
     ///   - channel: The type-safe PostgreSQL channel name
     ///   - payload: The Codable value to encode and send
     ///   - encoder: Optional custom JSON encoder (default: JSONEncoder())
-    /// - Throws: Database errors or encoding errors
+    /// - Throws: Database errors, encoding errors, or `notificationPayloadTooLarge` if payload exceeds 8000 bytes
     public func notify<Payload: Encodable & Sendable>(
         channel: ChannelName,
         payload: Payload,
@@ -417,6 +385,19 @@ extension Database.Writer {
                 "Failed to encode payload to UTF-8 JSON string"
             )
         }
+
+        // PostgreSQL NOTIFY has an 8000 byte limit on payloads
+        let maxPayloadSize = 8000
+        let payloadSize = json.utf8.count
+
+        guard payloadSize <= maxPayloadSize else {
+            throw Database.Error.notificationPayloadTooLarge(
+                size: payloadSize,
+                limit: maxPayloadSize,
+                hint: "Consider using a reference ID (e.g., record ID) and fetching full data from the database instead of sending large payloads"
+            )
+        }
+
         try await notify(channel: channel, payload: json)
     }
 
@@ -555,11 +536,13 @@ extension Database.Connection.`Protocol` {
 
     /// Sends a typed notification with automatic JSON encoding from within a transaction.
     ///
+    /// **PostgreSQL Limit**: NOTIFY payloads have a maximum size of 8000 bytes.
+    ///
     /// - Parameters:
     ///   - channel: The type-safe PostgreSQL channel name
     ///   - payload: The Codable value to encode and send
     ///   - encoder: Optional custom JSON encoder (default: JSONEncoder())
-    /// - Throws: Database errors or encoding errors
+    /// - Throws: Database errors, encoding errors, or `notificationPayloadTooLarge` if payload exceeds 8000 bytes
     public func notify<Payload: Encodable & Sendable>(
         channel: ChannelName,
         payload: Payload,
@@ -571,6 +554,19 @@ extension Database.Connection.`Protocol` {
                 "Failed to encode payload to UTF-8 JSON string"
             )
         }
+
+        // PostgreSQL NOTIFY has an 8000 byte limit on payloads
+        let maxPayloadSize = 8000
+        let payloadSize = json.utf8.count
+
+        guard payloadSize <= maxPayloadSize else {
+            throw Database.Error.notificationPayloadTooLarge(
+                size: payloadSize,
+                limit: maxPayloadSize,
+                hint: "Consider using a reference ID and fetching full data from the database"
+            )
+        }
+
         try await notify(channel: channel, payload: json)
     }
 

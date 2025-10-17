@@ -1,6 +1,6 @@
 import Dependencies
 import Foundation
-import Records
+@testable import Records
 import StructuredQueriesPostgres
 import Testing
 
@@ -180,12 +180,20 @@ private func storeTestDatabase(_ database: Database.TestDatabase) {
 /// - Each test suite isolated from others ✅
 ///
 /// Each test suite gets its own isolated database for data isolation.
-public final class LazyTestDatabase: Database.Writer, @unchecked Sendable {
+public final class LazyTestDatabase: Database.Writer, NotificationCapable, @unchecked Sendable {
     private let setupMode: Database.TestDatabaseSetupMode
 
     // Lazy database creation with Task-based synchronization
     private var _database: Database.TestDatabase?
     private var _creationTask: Task<Database.TestDatabase, Error>?
+
+    /// Exposes the underlying PostgresClient if available (for notification support)
+    public var postgresClient: PostgresClient? {
+        get async throws {
+            let db = try await getOrCreateDatabase()
+            return db.postgresClient
+        }
+    }
 
     private func getOrCreateDatabase() async throws -> Database.TestDatabase {
         // Check if already created

@@ -1,12 +1,21 @@
 import Foundation
 import PostgresNIO
+import Records
 import StructuredQueriesPostgres
 
 extension Database {
     /// A test database wrapper that provides schema isolation for tests
-    public final class TestDatabase: Writer, @unchecked Sendable {
+    public final class TestDatabase: Writer, NotificationCapable, @unchecked Sendable {
         private let wrapped: any Writer
         private let schemaName: String
+
+        /// Exposes the underlying PostgresClient if available (for notification support)
+        public var postgresClient: PostgresClient? {
+            if let testConn = wrapped as? TestConnection {
+                return testConn.postgresClient
+            }
+            return wrapped as? PostgresClient
+        }
 
         init(wrapped: any Writer, schemaName: String) {
             self.wrapped = wrapped

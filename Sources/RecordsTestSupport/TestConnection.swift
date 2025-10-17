@@ -83,6 +83,11 @@ private nonisolated(unsafe) var shutdownHandlerRegistered = false
 final class TestConnection: Database.Writer, @unchecked Sendable {
     private let client: PostgresClient
 
+    /// Exposes the underlying PostgresClient for notification support
+    package var postgresClient: PostgresClient {
+        client
+    }
+
     init(configuration: PostgresClient.Configuration) async {
         // Get or create the shared PostgresClient
         self.client = await sharedTestClient.getOrCreateClient(configuration: configuration)

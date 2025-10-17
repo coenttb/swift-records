@@ -10,72 +10,6 @@ import Tagged
 extension Database.Connection.`Protocol` {
     // MARK: - Type-Safe Notification Setup
 
-    /// Sets up a type-safe notification channel for a table.
-    ///
-    /// > Warning: Prefer using `setupNotificationChannel(schema:on:timing:includeOldValues:)`
-    /// > which provides stronger type safety by coupling the table and channel at compile time.
-    ///
-    /// ## Example
-    ///
-    /// ```swift
-    /// let channel: Database.Notification.Channel<ReminderEvent> = "reminder_events"
-    ///
-    /// try await db.write { db in
-    ///     try await db.setupNotificationChannel(
-    ///         for: Reminder.self,
-    ///         channel: channel,
-    ///         on: .insert, .update, .delete
-    ///     )
-    /// }
-    /// ```
-    ///
-    /// - Parameters:
-    ///   - table: The table type
-    ///   - channel: A type-safe channel
-    ///   - event: One or more database events (variadic)
-    ///   - timing: When the trigger fires
-    ///   - includeOldValues: Whether to include OLD row values
-    /// - Returns: The channel instance
-    /// - Throws: Database errors if setup fails
-    @available(*, deprecated, message: "Use setupNotificationChannel(schema:on:timing:includeOldValues:) for stronger type safety")
-    @discardableResult
-    public func setupNotificationChannel<On: Table, Payload: Codable & Sendable>(
-        for table: On.Type,
-        channel: Database.Notification.Channel<Payload>,
-        on event: Database.Notification.TriggerEvent...,
-        timing: Database.Notification.TriggerTiming = .after,
-        includeOldValues: Bool = false
-    ) async throws -> Database.Notification.Channel<Payload> {
-        let events = Array(event)
-
-        print("📢 Setting up notification channel '\(channel.name)' for table '\(On.tableName)'")
-
-        // 1. Create trigger function
-        try await createNotificationTriggerFunction(
-            for: On.self,
-            channel: channel.name,
-            includeOldValues: includeOldValues
-        )
-
-        // 2. Drop existing trigger (if exists)
-        try await dropNotificationTrigger(
-            for: On.self,
-            channel: channel.name,
-            ifExists: true
-        )
-
-        // 3. Create trigger
-        try await createNotificationTrigger(
-            for: On.self,
-            channel: channel.name,
-            events: events,
-            timing: timing
-        )
-
-        print("✅ Successfully set up notification channel '\(channel.name)' for table '\(On.tableName)'")
-        return channel
-    }
-
     /// Sets up a notification channel using a schema for maximum type safety.
     ///
     /// The table type is automatically derived from the schema, eliminating the possibility
@@ -163,37 +97,6 @@ extension Database.Connection.`Protocol` {
         return channel
     }
 
-    /// Removes notification channel setup from a table.
-    ///
-    /// > Warning: Prefer using `removeNotificationChannel(schema:)`
-    /// > which provides stronger type safety by coupling the table and channel at compile time.
-    ///
-    /// - Parameters:
-    ///   - table: The table type
-    ///   - channel: The channel to remove
-    /// - Throws: Database errors if removal fails
-    @available(*, deprecated, message: "Use removeNotificationChannel(schema:) for stronger type safety")
-    public func removeNotificationChannel<On: Table, Payload: Codable & Sendable>(
-        for table: On.Type,
-        channel: Database.Notification.Channel<Payload>
-    ) async throws {
-        let functionName = FunctionName(stringLiteral: "\(On.tableName)_\(channel.name.rawValue)_notify")
-
-        print("📢 Removing notification channel '\(channel.name)' from table '\(On.tableName)'")
-
-        // 1. Drop trigger
-        try await dropNotificationTrigger(
-            for: On.self,
-            channel: channel.name,
-            ifExists: true
-        )
-
-        // 2. Drop function
-        try await dropNotificationTriggerFunction(name: functionName, ifExists: true)
-
-        print("✅ Successfully removed notification channel '\(channel.name)' from table '\(On.tableName)'")
-    }
-
     /// Removes notification channel setup using a schema.
     ///
     /// The table type is automatically derived from the schema.
@@ -214,7 +117,21 @@ extension Database.Connection.`Protocol` {
     public func removeNotificationChannel<Schema: Database.Notification.ChannelSchema>(
         schema: Schema.Type
     ) async throws {
-        try await removeNotificationChannel(for: Schema.TableType.self, channel: Schema.channel)
+        let functionName = FunctionName(stringLiteral: "\(Schema.TableType.tableName)_\(Schema.channel.name.rawValue)_notify")
+
+        print("📢 Removing notification channel '\(Schema.channel.name)' from table '\(Schema.TableType.tableName)'")
+
+        // 1. Drop trigger
+        try await dropNotificationTrigger(
+            for: Schema.TableType.self,
+            channel: Schema.channel.name,
+            ifExists: true
+        )
+
+        // 2. Drop function
+        try await dropNotificationTriggerFunction(name: functionName, ifExists: true)
+
+        print("✅ Successfully removed notification channel '\(Schema.channel.name)' from table '\(Schema.TableType.tableName)'")
     }
 
     // MARK: - Internal Helpers (Type-Safe)

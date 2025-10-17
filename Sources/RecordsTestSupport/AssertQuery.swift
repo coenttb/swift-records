@@ -223,7 +223,7 @@ public func printTable<each C>(_ rows: [(repeat each C)], to output: inout some 
             defer { index += 1 }
             var cell = ""
             customDump(column, to: &cell)
-            let lines = cell.split(separator: "\n")
+            let lines: [Substring] = cell.split(separator: "\n")
             hasMultiLineRows = hasMultiLineRows || lines.count > 1
             maxRowSpan = max(maxRowSpan, lines.count)
             maxColumnSpan[index] = max(maxColumnSpan[index], lines.map(\.count).max() ?? 0)
