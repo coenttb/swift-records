@@ -212,33 +212,45 @@ extension Database.Reader {
     /// Returns both the notification stream and a readiness signal that yields
     /// once when the LISTEN command completes successfully. The stream is returned
     /// immediately, and LISTEN executes asynchronously.
+    ///
+    /// This implementation uses either:
+    /// - The dedicated notification client (if available and running)
+    /// - The database's own PostgresClient (fallback for tests and simple cases)
     private func _notifications<Payload: Decodable & Sendable>(
         channel: String,
         decoder: JSONDecoder
     ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
 
-        // Try to get PostgresClient - either directly or via NotificationCapable wrapper
-        let client: PostgresClient
+        // Try to resolve a client from the database connection
+        let useClient: PostgresClient
+
         if let directClient = self as? PostgresClient {
-            client = directClient
+            // Direct PostgresClient - use it
+            useClient = directClient
         } else if let capable = self as? NotificationCapable,
                   let postgresClient = try await capable.postgresClient {
-            client = postgresClient
+            // Wrapped client (Database.Reader wrapping PostgresClient) - use it
+            useClient = postgresClient
         } else {
             throw Database.Error.notificationNotSupported(
-                "Notifications currently only supported on PostgresClient. Found: \(type(of: self))"
+                "This database type does not support notifications. " +
+                "Notifications require a PostgresClient connection."
             )
         }
 
         // Create readiness signal channel
         let (readyStream, readyContinuation) = AsyncStream.makeStream(of: Void.self)
 
-        // Create the notification stream with structured concurrency
-        let notificationStream = AsyncThrowingStream<Database.Notification, any Swift.Error> { continuation in
+        // Create the notification stream with structured concurrency and bounded buffer
+        // Buffering strategy: keep newest 100 notifications, drop oldest on overflow
+        // This prevents memory exhaustion if notifications arrive faster than consumption
+        let notificationStream = AsyncThrowingStream<Database.Notification, any Swift.Error>(
+            bufferingPolicy: .bufferingNewest(100)
+        ) { continuation in
             // This task is tied to the stream's lifetime via onTermination
             let listenerTask = Task {
                 do {
-                    try await client.withConnection { postgres in
+                    try await useClient.withConnection { postgres in
                         // Set up notification handler FIRST (before LISTEN)
                         let listenerContext = postgres.addListener(channel: channel) { _, notification in
                             // Convert PostgresNIO notification to our typed notification
