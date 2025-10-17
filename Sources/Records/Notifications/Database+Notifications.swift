@@ -162,9 +162,8 @@ extension Database {
 extension Database.Reader {
     /// Listens for typed notifications with automatic JSON decoding.
     ///
-    /// This method returns immediately with a stream. The PostgreSQL LISTEN command
-    /// executes asynchronously in the background. Use `for await _ in ready { break }`
-    /// to wait until listening is active before sending notifications.
+    /// This method waits for the PostgreSQL LISTEN command to complete before returning.
+    /// By the time you receive the stream, it's safe to send notifications immediately.
     ///
     /// ## Example
     ///
@@ -175,7 +174,7 @@ extension Database.Reader {
     ///     let title: String
     /// }
     ///
-    /// let (stream, ready) = try await db.notifications(on: channel, expecting: ReminderChange.self)
+    /// let stream = try await db.notifications(on: channel, expecting: ReminderChange.self)
     ///
     /// Task {
     ///     for try await change in stream {
@@ -183,10 +182,7 @@ extension Database.Reader {
     ///     }
     /// }
     ///
-    /// // Wait for LISTEN to complete
-    /// for await _ in ready { break }
-    ///
-    /// // Now safe to send
+    /// // LISTEN is already complete - safe to send immediately
     /// try await db.notify(channel: channel, payload: myChange)
     /// ```
     ///
@@ -194,14 +190,16 @@ extension Database.Reader {
     ///   - channel: The type-safe PostgreSQL channel name to listen on
     ///   - type: The Codable type to decode payloads into (can be inferred from context)
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: A tuple of (notification stream, readiness signal)
+    ///   - bufferStrategy: Buffering strategy for the notification stream (default: .bufferingNewest(100))
+    /// - Returns: A notification stream (LISTEN already complete)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notifications<Payload: Decodable & Sendable>(
         on channel: ChannelName,
         expecting type: Payload.Type = Payload.self,
-        decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
-        try await _notifications(channel: channel.rawValue, decoder: decoder)
+        decoder: JSONDecoder = JSONDecoder(),
+        bufferStrategy: AsyncThrowingStream<Database.Notification, any Swift.Error>.Continuation.BufferingPolicy = .bufferingNewest(100)
+    ) async throws -> Database.NotificationStream<Payload> {
+        try await _notifications(channel: channel.rawValue, decoder: decoder, bufferStrategy: bufferStrategy)
     }
 
     // MARK: - Type-Safe Channel API
@@ -210,6 +208,8 @@ extension Database.Reader {
     ///
     /// This method provides compile-time type safety by coupling the channel name
     /// with its payload type. The returned stream automatically decodes JSON payloads.
+    ///
+    /// LISTEN completes before this method returns, so you can send immediately.
     ///
     /// ## Example
     ///
@@ -220,7 +220,7 @@ extension Database.Reader {
     /// }
     ///
     /// let channel: Database.Notification.Channel<UserEvent> = "user_events"
-    /// let (stream, ready) = try await db.notifications(on: channel)
+    /// let stream = try await db.notifications(on: channel)
     ///
     /// Task {
     ///     for try await event in stream {
@@ -228,18 +228,19 @@ extension Database.Reader {
     ///     }
     /// }
     ///
-    /// for await _ in ready { break }
+    /// // LISTEN already complete - safe to send
+    /// try await db.notify(channel: channel, payload: ...)
     /// ```
     ///
     /// - Parameters:
     ///   - channel: A type-safe channel that couples the name with the payload type
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: A tuple of (notification stream, readiness signal)
+    /// - Returns: A notification stream (LISTEN already complete)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notifications<Payload>(
         on channel: Database.Notification.Channel<Payload>,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
+    ) async throws -> Database.NotificationStream<Payload> {
         try await notifications(on: channel.name, expecting: Payload.self, decoder: decoder)
     }
 
@@ -247,6 +248,8 @@ extension Database.Reader {
     ///
     /// This method provides compile-time type safety through a schema that defines
     /// both the channel name and payload type in one place.
+    ///
+    /// LISTEN completes before this method returns, so you can send immediately.
     ///
     /// ## Example
     ///
@@ -260,7 +263,7 @@ extension Database.Reader {
     ///     }
     /// }
     ///
-    /// let (stream, ready) = try await db.notifications(from: UserEventsChannel.self)
+    /// let stream = try await db.notifications(from: UserEventsChannel.self)
     ///
     /// Task {
     ///     for try await event in stream {
@@ -268,18 +271,19 @@ extension Database.Reader {
     ///     }
     /// }
     ///
-    /// for await _ in ready { break }
+    /// // LISTEN already complete - safe to send
+    /// try await db.notify(schema: UserEventsChannel.self, payload: ...)
     /// ```
     ///
     /// - Parameters:
     ///   - schema: The notification channel schema type
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: A tuple of (notification stream, readiness signal)
+    /// - Returns: A notification stream (LISTEN already complete)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notifications<Schema: Database.Notification.ChannelSchema>(
         from schema: Schema.Type,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> (stream: Database.NotificationStream<Schema.Payload>, ready: AsyncStream<Void>) {
+    ) async throws -> Database.NotificationStream<Schema.Payload> {
         try await notifications(on: Schema.channelName, expecting: Schema.Payload.self, decoder: decoder)
     }
 
@@ -290,6 +294,8 @@ extension Database.Reader {
     /// This method is similar to `notifications()` but returns `NotificationEvent<Payload>`
     /// instead of just `Payload`, giving you access to the channel name and backend process ID.
     ///
+    /// LISTEN completes before this method returns, so you can send immediately.
+    ///
     /// ## Example
     ///
     /// ```swift
@@ -298,7 +304,7 @@ extension Database.Reader {
     ///     let action: String
     /// }
     ///
-    /// let (stream, ready) = try await db.notificationEvents(on: channel, expecting: ReminderChange.self)
+    /// let stream = try await db.notificationEvents(on: channel, expecting: ReminderChange.self)
     ///
     /// Task {
     ///     for try await event in stream {
@@ -308,7 +314,7 @@ extension Database.Reader {
     ///     }
     /// }
     ///
-    /// for await _ in ready { break }
+    /// // LISTEN already complete - safe to send
     /// try await db.notify(channel: channel, payload: myChange)
     /// ```
     ///
@@ -316,81 +322,112 @@ extension Database.Reader {
     ///   - channel: The type-safe PostgreSQL channel name to listen on
     ///   - type: The Codable type to decode payloads into (can be inferred from context)
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: A tuple of (notification event stream, readiness signal)
+    ///   - bufferStrategy: Buffering strategy for the notification stream (default: .bufferingNewest(100))
+    /// - Returns: A notification event stream (LISTEN already complete)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notificationEvents<Payload: Decodable & Sendable>(
         on channel: ChannelName,
         expecting type: Payload.Type = Payload.self,
-        decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> (stream: Database.NotificationEventStream<Payload>, ready: AsyncStream<Void>) {
-        try await _notificationEvents(channel: channel.rawValue, decoder: decoder)
+        decoder: JSONDecoder = JSONDecoder(),
+        bufferStrategy: AsyncThrowingStream<Database.Notification, any Swift.Error>.Continuation.BufferingPolicy = .bufferingNewest(100)
+    ) async throws -> Database.NotificationEventStream<Payload> {
+        try await _notificationEvents(channel: channel.rawValue, decoder: decoder, bufferStrategy: bufferStrategy)
     }
 
     /// Listens for notification events on a type-safe channel.
     ///
+    /// LISTEN completes before this method returns, so you can send immediately.
+    ///
     /// - Parameters:
     ///   - channel: A type-safe channel that couples the name with the payload type
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: A tuple of (notification event stream, readiness signal)
+    /// - Returns: A notification event stream (LISTEN already complete)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notificationEvents<Payload>(
         on channel: Database.Notification.Channel<Payload>,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> (stream: Database.NotificationEventStream<Payload>, ready: AsyncStream<Void>) {
+    ) async throws -> Database.NotificationEventStream<Payload> {
         try await notificationEvents(on: channel.name, expecting: Payload.self, decoder: decoder)
     }
 
     /// Listens for notification events using a notification channel schema.
     ///
+    /// LISTEN completes before this method returns, so you can send immediately.
+    ///
     /// - Parameters:
     ///   - schema: The notification channel schema type
     ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
-    /// - Returns: A tuple of (notification event stream, readiness signal)
+    /// - Returns: A notification event stream (LISTEN already complete)
     /// - Throws: Database errors, or decoding errors if payload is invalid JSON
     public func notificationEvents<Schema: Database.Notification.ChannelSchema>(
         from schema: Schema.Type,
         decoder: JSONDecoder = JSONDecoder()
-    ) async throws -> (stream: Database.NotificationEventStream<Schema.Payload>, ready: AsyncStream<Void>) {
+    ) async throws -> Database.NotificationEventStream<Schema.Payload> {
         try await notificationEvents(on: Schema.channelName, expecting: Schema.Payload.self, decoder: decoder)
     }
 
-    /// Internal implementation with readiness signaling.
+    /// Internal implementation that waits for LISTEN to complete before returning.
     ///
-    /// This reuses the primitive `_rawNotifications()` and wraps it with
-    /// `NotificationStream` to decode just the payload.
+    /// This reuses the primitive `_rawNotifications()`, awaits readiness,
+    /// then wraps the stream with `NotificationStream` to decode just the payload.
+    ///
+    /// By the time this function returns, the LISTEN command has completed,
+    /// so the caller can immediately send notifications without race conditions.
     private func _notifications<Payload: Decodable & Sendable>(
         channel: String,
-        decoder: JSONDecoder
-    ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
+        decoder: JSONDecoder,
+        bufferStrategy: AsyncThrowingStream<Database.Notification, any Swift.Error>.Continuation.BufferingPolicy
+    ) async throws -> Database.NotificationStream<Payload> {
 
         // Get the raw notification stream (primitive)
-        let (rawStream, ready) = try await _rawNotifications(channel: channel)
+        let (rawStream, ready) = try await _rawNotifications(channel: channel, bufferStrategy: bufferStrategy)
+
+        // Wait for LISTEN to complete before returning
+        // This ensures the caller can safely send notifications immediately
+        // Use first(where:) for explicit, safe consumption of readiness signal
+        guard let _ = await ready.first(where: { _ in true }) else {
+            // Stream ended without signaling - this shouldn't happen in normal operation
+            throw Database.Error.notificationNotSupported(
+                "LISTEN readiness signal ended unexpectedly"
+            )
+        }
 
         // Wrap with NotificationStream (composition)
-        let typedStream = Database.NotificationStream<Payload>(base: rawStream, decoder: decoder)
-
-        return (typedStream, ready)
+        return Database.NotificationStream<Payload>(base: rawStream, decoder: decoder)
     }
 
-    /// Internal implementation for notification events with full metadata.
+    /// Internal implementation for notification events that waits for LISTEN to complete.
     ///
-    /// This reuses the primitive `_rawNotifications()` and wraps it with
-    /// `NotificationEventStream` to expose metadata alongside decoded payload.
+    /// This reuses the primitive `_rawNotifications()`, awaits readiness,
+    /// then wraps the stream with `NotificationEventStream` to expose metadata
+    /// alongside the decoded payload.
+    ///
+    /// By the time this function returns, the LISTEN command has completed,
+    /// so the caller can immediately send notifications without race conditions.
     private func _notificationEvents<Payload: Decodable & Sendable>(
         channel: String,
-        decoder: JSONDecoder
-    ) async throws -> (stream: Database.NotificationEventStream<Payload>, ready: AsyncStream<Void>) {
+        decoder: JSONDecoder,
+        bufferStrategy: AsyncThrowingStream<Database.Notification, any Swift.Error>.Continuation.BufferingPolicy
+    ) async throws -> Database.NotificationEventStream<Payload> {
 
         // Get the raw notification stream (primitive)
-        let (rawStream, ready) = try await _rawNotifications(channel: channel)
+        let (rawStream, ready) = try await _rawNotifications(channel: channel, bufferStrategy: bufferStrategy)
+
+        // Wait for LISTEN to complete before returning
+        // This ensures the caller can safely send notifications immediately
+        // Use first(where:) for explicit, safe consumption of readiness signal
+        guard let _ = await ready.first(where: { _ in true }) else {
+            // Stream ended without signaling - this shouldn't happen in normal operation
+            throw Database.Error.notificationNotSupported(
+                "LISTEN readiness signal ended unexpectedly"
+            )
+        }
 
         // Wrap with NotificationEventStream (composition)
-        let eventStream = Database.NotificationEventStream<Payload>(
+        return Database.NotificationEventStream<Payload>(
             base: rawStream,
             decoder: decoder
         )
-
-        return (eventStream, ready)
     }
 
     /// Primitive: raw notification stream without decoding.
@@ -398,7 +435,8 @@ extension Database.Reader {
     /// This is the foundational implementation that both `NotificationStream`
     /// and `NotificationEventStream` compose upon.
     private func _rawNotifications(
-        channel: String
+        channel: String,
+        bufferStrategy: AsyncThrowingStream<Database.Notification, any Swift.Error>.Continuation.BufferingPolicy
     ) async throws -> (stream: AsyncThrowingStream<Database.Notification, any Swift.Error>, ready: AsyncStream<Void>) {
 
         // Try to resolve a client from the database connection
@@ -421,11 +459,12 @@ extension Database.Reader {
         // Create readiness signal channel
         let (readyStream, readyContinuation) = AsyncStream.makeStream(of: Void.self)
 
-        // Create the notification stream with structured concurrency and bounded buffer
-        // Buffering strategy: keep newest 100 notifications, drop oldest on overflow
+        // Create the notification stream with structured concurrency and configurable buffer
+        // Default buffering strategy: keep newest 100 notifications, drop oldest on overflow
         // This prevents memory exhaustion if notifications arrive faster than consumption
+        // Users can customize this via the bufferStrategy parameter
         let notificationStream = AsyncThrowingStream<Database.Notification, any Swift.Error>(
-            bufferingPolicy: .bufferingNewest(100)
+            bufferingPolicy: bufferStrategy
         ) { continuation in
             // This task is tied to the stream's lifetime via onTermination
             let listenerTask = Task {
@@ -468,8 +507,13 @@ extension Database.Reader {
                         do {
                             try await connection.execute("UNLISTEN \(channelName.quoted)")
                         } catch {
-                            // Log cleanup errors - don't swallow them
-                            print("⚠️ Failed to UNLISTEN channel '\(channel)': \(error)")
+                            // Finish stream with cleanup error - don't swallow it
+                            // This ensures the error is propagated to the stream consumer
+                            continuation.finish(throwing: Database.Error.notificationCleanupFailed(
+                                channel: channel,
+                                underlying: error
+                            ))
+                            return
                         }
 
                         continuation.finish()

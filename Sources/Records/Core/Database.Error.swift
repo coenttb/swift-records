@@ -45,6 +45,9 @@ extension Database {
         /// Notification payload exceeds PostgreSQL size limit.
         case notificationPayloadTooLarge(size: Int, limit: Int, hint: String)
 
+        /// Failed to cleanup notification resources (UNLISTEN).
+        case notificationCleanupFailed(channel: String, underlying: Swift.Error)
+
         public var errorDescription: String? {
             switch self {
             case .poolShuttingDown:
@@ -88,6 +91,9 @@ extension Database {
 
             case .notificationPayloadTooLarge(let size, let limit, let hint):
                 return "Notification payload size (\(size) bytes) exceeds PostgreSQL limit (\(limit) bytes). \(hint)"
+
+            case .notificationCleanupFailed(let channel, let error):
+                return "Failed to cleanup notification channel '\(channel)': \(error.localizedDescription)"
             }
         }
     }

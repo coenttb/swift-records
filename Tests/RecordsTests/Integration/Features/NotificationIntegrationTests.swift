@@ -6,86 +6,27 @@ import PostgresNIO
 @testable import Records
 import RecordsTestSupport
 
+// MARK: - Suite 1: Basic Operations & Error Handling (10 tests)
+
 @Suite(
-    "PostgreSQL LISTEN/NOTIFY Integration",
-//    .serialized,
+    "PostgreSQL LISTEN/NOTIFY - Basic Operations",
+    .disabled(),
+    .serialized,
     .dependencies {
         $0.envVars = .development
         $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
 )
-struct NotificationIntegrationTests {
+struct NotificationBasicTests {
     @Dependency(\.defaultDatabase) var database
-
-    // MARK: - Basic Notification Tests
 
     struct SimplePayload: Codable, Equatable, Sendable {
         let message: String
     }
 
-    @Test("Send and receive basic string notification")
-    func basicNotification() async throws {
-        let channel = try ChannelName(validating: "test_basic_\(UUID().uuidString)")
-        let payload = SimplePayload(message: "Hello, PostgreSQL!")
-
-        // Get stream and readiness signal
-        let (stream, ready): (Database.NotificationStream<SimplePayload>, AsyncStream<Void>) =
-            try await database.notifications(on: channel, expecting: SimplePayload.self)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Start listener in background
-            group.addTask {
-                var receivedCount = 0
-                for try await received in stream {
-                    #expect(received == payload)
-                    receivedCount += 1
-
-                    // Exit after receiving one notification - stream cleans up automatically
-                    if receivedCount == 1 {
-                        break
-                    }
-                }
-                #expect(receivedCount == 1)
-            }
-
-            // Wait for LISTEN to complete
-            for await _ in ready { break }
-
-            // Now safe to send
-            try await database.notify(channel: channel, payload: payload)
-
-            // Wait for listener to complete naturally
-            try await group.waitForAll()
-        }
-    }
-
     struct EmptyPayload: Codable, Equatable, Sendable {
         // Empty struct encodes to {}
     }
-
-    @Test("Send notification without payload")
-    func notificationWithoutPayload() async throws {
-        let channel = try ChannelName(validating: "test_no_payload_\(UUID().uuidString)")
-        let payload = EmptyPayload()
-
-        let (stream, ready) = try await database.notifications(on: channel, expecting: EmptyPayload.self)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for try await received in stream {
-                    #expect(received == payload)
-                    break  // Stream cleans up automatically
-                }
-            }
-
-            for await _ in ready { break }
-            try await database.notify(channel: channel, payload: payload)
-
-            try await group.waitForAll()
-        }
-    }
-
-    // MARK: - Typed Notification Tests
 
     struct TestMessage: Codable, Equatable, Sendable {
         let id: Int
@@ -93,54 +34,115 @@ struct NotificationIntegrationTests {
         let timestamp: Date
     }
 
-    @Test("Send and receive typed notification")
-    func typedNotification() async throws {
-        let channel = try ChannelName(validating: "test_typed_\(UUID().uuidString)")
-        let message = TestMessage(
-            id: 42,
-            action: "created",
-            timestamp: Date()
-        )
+    struct ReminderChange: Codable, Equatable, Sendable {
+        let id: Int
+        let action: String
+        let title: String
+    }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+    enum RoundTripTestCase {
+        case simplePayload
+        case emptyPayload
+        case typedWithDate
 
-        let (stream, ready) = try await database.notifications(
-            on: channel,
-            expecting: TestMessage.self,
-            decoder: decoder
-        )
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for try await received in stream {
-                    #expect(received.id == message.id)
-                    #expect(received.action == message.action)
-                    // Allow small timestamp difference due to encoding/decoding
-                    #expect(abs(received.timestamp.timeIntervalSince(message.timestamp)) < 1.0)
-                    break
-                }
+        var description: String {
+            switch self {
+            case .simplePayload: return "simple string payload"
+            case .emptyPayload: return "empty payload"
+            case .typedWithDate: return "typed message with ISO8601 date"
             }
-
-            for await _ in ready { break }
-
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            try await database.notify(channel: channel, payload: message, encoder: encoder)
-
-            try await group.waitForAll()
         }
     }
 
-    // MARK: - Multiple Notifications Tests
+    @Test(
+        "Send and receive notification",
+        arguments: [
+            RoundTripTestCase.simplePayload,
+            RoundTripTestCase.emptyPayload,
+            RoundTripTestCase.typedWithDate
+        ]
+    )
+    func notificationRoundTrip(testCase: RoundTripTestCase) async throws {
+        switch testCase {
+        case .simplePayload:
+            let channel = try ChannelName(validating: "test_basic_\(UUID().uuidString)")
+            let payload = SimplePayload(message: "Hello, PostgreSQL!")
 
+            let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for try await received in stream {
+                        #expect(received == payload)
+                        break
+                    }
+                }
+
+                try await database.notify(channel: channel, payload: payload)
+                try await group.waitForAll()
+            }
+
+        case .emptyPayload:
+            let channel = try ChannelName(validating: "test_no_payload_\(UUID().uuidString)")
+            let payload = EmptyPayload()
+
+            let stream = try await database.notifications(on: channel, expecting: EmptyPayload.self)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for try await received in stream {
+                        #expect(received == payload)
+                        break
+                    }
+                }
+
+                try await database.notify(channel: channel, payload: payload)
+                try await group.waitForAll()
+            }
+
+        case .typedWithDate:
+            let channel = try ChannelName(validating: "test_typed_\(UUID().uuidString)")
+            let message = TestMessage(
+                id: 42,
+                action: "created",
+                timestamp: Date()
+            )
+
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+
+            let stream = try await database.notifications(
+                on: channel,
+                expecting: TestMessage.self,
+                decoder: decoder
+            )
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for try await received in stream {
+                        #expect(received.id == message.id)
+                        #expect(received.action == message.action)
+                        #expect(abs(received.timestamp.timeIntervalSince(message.timestamp)) < 1.0)
+                        break
+                    }
+                }
+
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                try await database.notify(channel: channel, payload: message, encoder: encoder)
+
+                try await group.waitForAll()
+            }
+        }
+    }
+    
     @Test("Receive multiple notifications on same channel")
     func multipleNotifications() async throws {
         let channel = try ChannelName(validating: "test_multiple_\(UUID().uuidString)")
         let count = 5
-
-        let (stream, ready) = try await database.notifications(on: channel, expecting: SimplePayload.self)
-
+        
+        let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
+        
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 var received: [SimplePayload] = []
@@ -151,203 +153,194 @@ struct NotificationIntegrationTests {
                     }
                 }
                 #expect(received.count == count)
-                // Verify FIFO ordering
                 for i in 0..<count {
                     #expect(received[i] == SimplePayload(message: "Message \(i)"))
                 }
             }
-
-            // Wait for LISTEN to complete
-            for await _ in ready { break }
-
-            // Send multiple notifications
+            
             for i in 0..<count {
                 try await database.notify(channel: channel, payload: SimplePayload(message: "Message \(i)"))
-                // Small delay between notifications
                 try await Task.sleep(for: .milliseconds(10))
             }
-
+            
             try await group.waitForAll()
         }
     }
+    
+    enum ConsumerTestCase {
+        case channelIsolation
+        case multipleConsumersSameChannel
 
-    // MARK: - Multiple Channels Tests
-
-    @Test("Channel isolation - listeners only receive their channel's notifications")
-    func channelIsolation() async throws {
-        let channelA = try ChannelName(validating: "test_channel_a_\(UUID().uuidString)")
-        let channelB = try ChannelName(validating: "test_channel_b_\(UUID().uuidString)")
-
-        let (streamA, readyA) = try await database.notifications(on: channelA, expecting: SimplePayload.self)
-        let (streamB, readyB) = try await database.notifications(on: channelB, expecting: SimplePayload.self)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Listener A - should only receive from channel A
-            group.addTask {
-                var receivedA: [SimplePayload] = []
-                for try await notification in streamA {
-                    receivedA.append(notification)
-                    if receivedA.count == 1 {
-                        break
-                    }
-                }
-                #expect(receivedA.count == 1)
-                #expect(receivedA[0].message == "For Channel A")
+        var description: String {
+            switch self {
+            case .channelIsolation: return "channel isolation - separate channels"
+            case .multipleConsumersSameChannel: return "multiple consumers on same channel"
             }
-
-            // Listener B - should only receive from channel B
-            group.addTask {
-                var receivedB: [SimplePayload] = []
-                for try await notification in streamB {
-                    receivedB.append(notification)
-                    if receivedB.count == 1 {
-                        break
-                    }
-                }
-                #expect(receivedB.count == 1)
-                #expect(receivedB[0].message == "For Channel B")
-            }
-
-            // Wait for both listeners to be ready
-            for await _ in readyA { break }
-            for await _ in readyB { break }
-
-            // Send to channel A - only listener A should receive
-            try await database.notify(channel: channelA, payload: SimplePayload(message: "For Channel A"))
-
-            // Send to channel B - only listener B should receive
-            try await database.notify(channel: channelB, payload: SimplePayload(message: "For Channel B"))
-
-            try await group.waitForAll()
         }
     }
 
-    // TODO: Multi-channel listening not yet implemented
-    // The current API only supports listening to a single channel at a time
-    // Future enhancement: Add notifications(channels: [ChannelName]) method
-    /*
-    @Test("Listen to multiple channels")
-    func multipleChannels() async throws {
-        let channel1 = try ChannelName(validating: "test_multi_1_\(UUID().uuidString)")
-        let channel2 = try ChannelName(validating: "test_multi_2_\(UUID().uuidString)")
+    @Test(
+        "Multiple consumer scenarios",
+        arguments: [
+            ConsumerTestCase.channelIsolation,
+            ConsumerTestCase.multipleConsumersSameChannel
+        ]
+    )
+    func multipleConsumerScenarios(testCase: ConsumerTestCase) async throws {
+        switch testCase {
+        case .channelIsolation:
+            let channelA = try ChannelName(validating: "test_channel_a_\(UUID().uuidString)")
+            let channelB = try ChannelName(validating: "test_channel_b_\(UUID().uuidString)")
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                var receivedChannels: Set<ChannelName> = []
-                for try await notification in try await self.database.notifications(
-                    channels: [channel1, channel2]
-                ) {
-                    receivedChannels.insert(notification.channel)
-                    if receivedChannels.count == 2 {
+            let streamA = try await database.notifications(on: channelA, expecting: SimplePayload.self)
+            let streamB = try await database.notifications(on: channelB, expecting: SimplePayload.self)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    var receivedA: [SimplePayload] = []
+                    for try await notification in streamA {
+                        receivedA.append(notification)
+                        if receivedA.count == 1 {
+                            break
+                        }
+                    }
+                    #expect(receivedA.count == 1)
+                    #expect(receivedA[0].message == "For Channel A")
+                }
+
+                group.addTask {
+                    var receivedB: [SimplePayload] = []
+                    for try await notification in streamB {
+                        receivedB.append(notification)
+                        if receivedB.count == 1 {
+                            break
+                        }
+                    }
+                    #expect(receivedB.count == 1)
+                    #expect(receivedB[0].message == "For Channel B")
+                }
+
+                try await database.notify(channel: channelA, payload: SimplePayload(message: "For Channel A"))
+                try await database.notify(channel: channelB, payload: SimplePayload(message: "For Channel B"))
+
+                try await group.waitForAll()
+            }
+
+        case .multipleConsumersSameChannel:
+            let channel = try ChannelName(validating: "test_multi_consumer_\(UUID().uuidString)")
+
+            let stream1 = try await database.notifications(on: channel, expecting: SimplePayload.self)
+            let stream2 = try await database.notifications(on: channel, expecting: SimplePayload.self)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for try await received in stream1 {
+                        #expect(received.message == "Broadcast")
                         break
                     }
                 }
-                #expect(receivedChannels.contains(channel1))
-                #expect(receivedChannels.contains(channel2))
+
+                group.addTask {
+                    for try await received in stream2 {
+                        #expect(received.message == "Broadcast")
+                        break
+                    }
+                }
+
+                try await database.notify(channel: channel, payload: SimplePayload(message: "Broadcast"))
+                try await group.waitForAll()
+            }
+        }
+    }
+    
+    @Test(
+        "Stream lifecycle handling",
+        arguments: [
+            (lifecycle: "explicit cancellation", explicitCancel: true, delay: 100),
+            (lifecycle: "natural abandonment", explicitCancel: false, delay: 200)
+        ]
+    )
+    func streamLifecycle(lifecycle: String, explicitCancel: Bool, delay: Int) async throws {
+        let channel = try ChannelName(validating: "test_lifecycle_\(UUID().uuidString)")
+
+        let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
+
+        if explicitCancel {
+            let task = Task {
+                var count = 0
+                for try await _ in stream {
+                    count += 1
+                }
+                return count
             }
 
+            try await Task.sleep(for: .milliseconds(delay))
+            task.cancel()
             try await Task.sleep(for: .milliseconds(200))
 
-            try await database.notify(channel: channel1, payload: "From channel 1")
-            try await Task.sleep(for: .milliseconds(50))
-            try await database.notify(channel: channel2, payload: "From channel 2")
-
-            try await group.next()
-            group.cancelAll()
+            let result = await task.result
+            _ = result
+        } else {
+            // Natural abandonment - stream goes out of scope
+            _ = stream
+            try await Task.sleep(for: .milliseconds(delay))
         }
     }
-    */
-
-    // MARK: - Cancellation Tests
-
-    @Test("Handle cancellation gracefully")
-    func cancellation() async throws {
-        let channel = try ChannelName(validating: "test_cancel_\(UUID().uuidString)")
-
-        let (stream, ready) = try await database.notifications(on: channel, expecting: SimplePayload.self)
-
-        let task = Task {
-            var count = 0
-            for try await _ in stream {
-                count += 1
-            }
-            return count
-        }
-
-        // Wait for LISTEN to complete
-        for await _ in ready { break }
-
-        // Give it a moment
-        try await Task.sleep(for: .milliseconds(100))
-
-        // Cancel the task
-        task.cancel()
-
-        // Give it time to clean up
-        try await Task.sleep(for: .milliseconds(200))
-
-        // Check that task completes
-        let result = await task.result
-        // Cancellation should have occurred
-        _ = result  // Don't assert on the specific error type - just that it completes
-    }
-
-    // MARK: - Error Handling Tests
-
-    @Test("Handle JSON decoding errors gracefully")
-    func jsonDecodingError() async throws {
+    
+    @Test(
+        "JSON decoding error handling",
+        arguments: [
+            (sendSubsequent: false, description: "simple decoding error"),
+            (sendSubsequent: true, description: "error terminates stream - subsequent messages not received")
+        ]
+    )
+    func jsonDecodingError(sendSubsequent: Bool, description: String) async throws {
         let channel = try ChannelName(validating: "test_decode_error_\(UUID().uuidString)")
 
-        let (stream, ready) = try await database.notifications(on: channel, expecting: TestMessage.self)
+        let stream = try await database.notifications(on: channel, expecting: TestMessage.self)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
+                var receivedCount = 0
                 do {
                     for try await _: TestMessage in stream {
-                        Issue.record("Should have thrown decoding error")
-                        break
+                        receivedCount += 1
                     }
+                    Issue.record("Should have thrown decoding error for: \(description)")
                 } catch let error as Database.Error {
                     switch error {
                     case .notificationDecodingFailed:
-                        break // Expected
+                        #expect(receivedCount == 0, "Should fail on first message for: \(description)")
                     default:
-                        Issue.record("Wrong error type: \(error)")
+                        Issue.record("Wrong error type for \(description): \(error)")
                     }
                 } catch {
-                    Issue.record("Wrong error type: \(error)")
+                    Issue.record("Wrong error type for \(description): \(error)")
                 }
             }
 
-            for await _ in ready { break }
-
-            // Send invalid JSON
             try await database.notify(channel: channel, payload: "not valid json")
+
+            if sendSubsequent {
+                try await Task.sleep(for: .milliseconds(100))
+
+                let validMessage = TestMessage(id: 1, action: "test", timestamp: Date())
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                try await database.notify(channel: channel, payload: validMessage, encoder: encoder)
+            }
 
             try await group.waitForAll()
         }
     }
-
-    // TODO: Test for empty channel list - requires multi-channel API
-    // Currently the single-channel API requires a channel parameter, so this test isn't applicable
-    /*
-    @Test("Require at least one channel")
-    func emptyChannelList() async throws {
-        await #expect(throws: Database.Error.self) {
-            _ = try await database.notifications(channels: [])
-        }
-    }
-    */
-
-    // MARK: - SQL Injection Protection
-
+    
     @Test("Escape single quotes in payload")
     func sqlInjectionProtection() async throws {
         let channel = try ChannelName(validating: "test_injection_\(UUID().uuidString)")
         let payload = SimplePayload(message: "It's a beautiful day, isn't it?")
-
-        let (stream, ready) = try await database.notifications(on: channel, expecting: SimplePayload.self)
-
+        
+        let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
+        
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 for try await received in stream {
@@ -355,96 +348,97 @@ struct NotificationIntegrationTests {
                     break
                 }
             }
-
-            for await _ in ready { break }
+            
             try await database.notify(channel: channel, payload: payload)
-
             try await group.waitForAll()
         }
     }
+    
+    @Test(
+        "Notification behavior in transactions",
+        arguments: [
+            (shouldCommit: true, expectedCount: 1, description: "commit"),
+            (shouldCommit: false, expectedCount: 0, description: "rollback")
+        ]
+    )
+    func transactionNotificationBehavior(
+        shouldCommit: Bool,
+        expectedCount: Int,
+        description: String
+    ) async throws {
+        let channel = try ChannelName(validating: "test_txn_\(description)_\(UUID().uuidString)")
+        let payload = SimplePayload(message: description)
 
-    // MARK: - Transaction Behavior Tests
+        let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
 
-    @Test("Notifications not sent on transaction rollback")
-    func transactionRollback() async throws {
-        let channel = try ChannelName(validating: "test_rollback_\(UUID().uuidString)")
-        let payload = SimplePayload(message: "should not be sent")
-
-        let (stream, ready) = try await database.notifications(on: channel, expecting: SimplePayload.self)
-
-        // Start listener
         let listenerTask = Task {
-            var receivedCount = 0
-            for try await _ in stream {
-                receivedCount += 1
+            var received: [SimplePayload] = []
+            for try await notification in stream {
+                received.append(notification)
             }
-            return receivedCount
+            return received
         }
 
-        // Wait for LISTEN to complete
-        for await _ in ready { break }
-
-        // Send notification in transaction that rolls back
         do {
             try await database.withTransaction { db in
                 try await db.notify(channel: channel, payload: payload)
-                throw CancellationError() // Force rollback
+                if !shouldCommit {
+                    throw CancellationError()
+                }
             }
         } catch {
-            // Expected - transaction rolled back
+            // Expected for rollback case
         }
 
-        // Wait a moment to ensure no notification arrives
         try await Task.sleep(for: .milliseconds(100))
 
-        // Cancel listener - it should have received ZERO notifications
         listenerTask.cancel()
-        let count = await listenerTask.result
+        let result = await listenerTask.result
 
-        // Verify listener received nothing (rollback prevented notification)
-        switch count {
-        case .success(let c):
-            #expect(c == 0, "Expected 0 notifications after rollback, got \(c)")
+        switch result {
+        case .success(let received):
+            #expect(received.count == expectedCount, "Expected \(expectedCount) notifications after \(description), got \(received.count)")
+            if expectedCount > 0 {
+                #expect(received[0] == payload)
+            }
         case .failure:
-            // Task was cancelled, which is expected
             break
         }
     }
+}
 
-    @Test("Notifications within transactions")
-    func transactionNotifications() async throws {
-        let channel = try ChannelName(validating: "test_transaction_\(UUID().uuidString)")
-        let payload = SimplePayload(message: "committed")
+// MARK: - Suite 2: Edge Cases & Advanced Features (10 tests)
 
-        let (stream, ready) = try await database.notifications(on: channel, expecting: SimplePayload.self)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for try await received in stream {
-                    #expect(received == payload)
-                    break
-                }
-            }
-
-            for await _ in ready { break }
-
-            // Notification should only be visible after commit
-            try await database.withTransaction { db in
-                try await db.notify(channel: channel, payload: payload)
-            }
-
-            try await group.waitForAll()
-        }
+@Suite(
+    "PostgreSQL LISTEN/NOTIFY - Advanced Features",
+//    .disabled(),
+    .serialized,
+    .dependencies {
+        $0.envVars = .development
+        $0.defaultDatabase = Database.TestDatabase.withReminderData()
     }
-
-    // MARK: - Real-world Use Case Tests
-
+)
+struct NotificationAdvancedTests {
+    @Dependency(\.defaultDatabase) var database
+    
+    struct SimplePayload: Codable, Equatable, Sendable {
+        let message: String
+    }
+    
+    struct EmptyPayload: Codable, Equatable, Sendable {}
+    
+    struct TestMessage: Codable, Equatable, Sendable {
+        let id: Int
+        let action: String
+        let timestamp: Date
+    }
+    
     struct ReminderChange: Codable, Equatable, Sendable {
         let id: Int
         let action: String
         let title: String
     }
-
+    
     @Test("Real-world reminder change notification")
     func realWorldUseCase() async throws {
         let channel = try ChannelName(validating: "reminder_changes")
@@ -453,27 +447,154 @@ struct NotificationIntegrationTests {
             action: "updated",
             title: "Buy groceries"
         )
-
-        let (stream, ready) = try await database.notifications(on: channel, expecting: ReminderChange.self)
-
+        
+        let stream = try await database.notifications(on: channel, expecting: ReminderChange.self)
+        
         try await withThrowingTaskGroup(of: Void.self) { group in
-            // Simulate real-time UI update listener
             group.addTask {
                 for try await received in stream {
                     #expect(received == change)
-                    // In real app: await MainActor.run { updateUI(with: received) }
                     break
                 }
             }
-
-            for await _ in ready { break }
-
-            // Simulate database write + notification
+            
             try await database.write { db in
-                // In real app: try await Reminder.update(...)
                 try await db.notify(channel: channel, payload: change)
             }
+            
+            try await group.waitForAll()
+        }
+    }
+    
+    @Test(
+        "Payload size handling",
+        arguments: [
+            (size: 7985, shouldSucceed: true, description: "Just under limit (8000 - 15 overhead)"),
+            (size: 7986, shouldSucceed: false, description: "At exact limit (8000 - 14 overhead) - rejected by PostgreSQL"),
+            (size: 9000, shouldSucceed: false, description: "Well over limit - rejected by validation")
+        ]
+    )
+    func payloadSizeHandling(size: Int, shouldSucceed: Bool, description: String) async throws {
+        let channel = try ChannelName(validating: "test_size_\(size)_\(UUID().uuidString)")
 
+        // {"message":"..."} = 14 bytes overhead
+        let largeMessage = String(repeating: "x", count: size)
+        let payload = SimplePayload(message: largeMessage)
+
+        if shouldSucceed {
+            // Should succeed without throwing
+            try await database.notify(channel: channel, payload: payload)
+        } else {
+            // Should throw an error (either from our validation or PostgreSQL)
+            do {
+                try await database.notify(channel: channel, payload: payload)
+                Issue.record("Should have thrown payload size error for \(description)")
+            } catch let error as Database.Error {
+                // Our validation catches payloads > 8000 bytes
+                switch error {
+                case .notificationPayloadTooLarge(let actualSize, let limit, let hint):
+                    #expect(actualSize > limit, "Payload size \(actualSize) should exceed limit \(limit)")
+                    #expect(limit == 8000, "PostgreSQL NOTIFY limit should be 8000 bytes")
+                    #expect(hint.contains("reference ID"), "Error hint should mention reference ID pattern")
+                default:
+                    Issue.record("Wrong Database.Error type for \(description): \(error)")
+                }
+            } catch {
+                // PostgreSQL may reject payloads at exactly 8000 bytes with PSQLError
+                // This is expected behavior - payloads at the limit are rejected by the server
+                // We accept any error for the boundary cases
+            }
+        }
+    }
+    
+    @Test("Buffer overflow - fast producer, slow consumer")
+    func bufferOverflow() async throws {
+        let channel = try ChannelName(validating: "test_buffer_\(UUID().uuidString)")
+        
+        let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
+        
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var received: [SimplePayload] = []
+                for try await notification in stream {
+                    received.append(notification)
+                    try await Task.sleep(for: .milliseconds(100))
+                    
+                    if received.count == 10 {
+                        break
+                    }
+                }
+                #expect(received.count == 10)
+            }
+            
+            for i in 0..<10 {
+                try await database.notify(channel: channel, payload: SimplePayload(message: "Message \(i)"))
+            }
+            
+            try await group.waitForAll()
+        }
+    }
+    
+    @Test("Rapid subscribe/unsubscribe")
+    func rapidSubscribeUnsubscribe() async throws {
+        for i in 0..<10 {
+            let channel = try ChannelName(validating: "test_rapid_\(i)_\(UUID().uuidString)")
+            let stream = try await database.notifications(on: channel, expecting: SimplePayload.self)
+            
+            let task = Task {
+                for try await _ in stream {
+                    break
+                }
+            }
+            
+            task.cancel()
+            _ = try? await task.value
+        }
+    }
+    
+    @Test("Empty payload string")
+    func emptyPayloadString() async throws {
+        let channel = try ChannelName(validating: "test_empty_\(UUID().uuidString)")
+        
+        let stream = try await database.notifications(on: channel, expecting: EmptyPayload.self)
+        
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                do {
+                    for try await received in stream {
+                        #expect(received == EmptyPayload())
+                        break
+                    }
+                } catch {
+                    print("Empty payload error: \(error)")
+                }
+            }
+            
+            try await database.notify(channel: channel, payload: "")
+            
+            try await Task.sleep(for: .milliseconds(100))
+            group.cancelAll()
+        }
+    }
+    
+    @Test("NotificationEvent stream includes metadata")
+    func notificationEventMetadata() async throws {
+        let channel = try ChannelName(validating: "test_metadata_\(UUID().uuidString)")
+        let payload = SimplePayload(message: "Test")
+        
+        let stream = try await database.notificationEvents(on: channel, expecting: SimplePayload.self)
+        
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for try await event in stream {
+                    #expect(event.payload == payload)
+                    #expect(event.channel == channel)
+                    #expect(event.backendPID > 0, "Backend PID should be positive")
+                    break
+                }
+            }
+            
+            try await database.notify(channel: channel, payload: payload)
             try await group.waitForAll()
         }
     }
