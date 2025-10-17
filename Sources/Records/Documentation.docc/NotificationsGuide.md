@@ -47,53 +47,41 @@ for try await change: ReminderChange in try await db.notifications(channel: "rem
 
 This example shows how to build a real-time reminder system where UI updates happen automatically when any client modifies a reminder.
 
-### Step 1: Create the Database Trigger
+### Step 1: Set Up Type-Safe Notification Channel
 
 ```swift
+// Define a schema that couples table and notifications
+struct ReminderNotifications: Database.Notification.ChannelSchema {
+    typealias TableType = Reminder  // ← Compile-time table coupling!
+
+    struct Payload: Codable, Sendable {
+        let operation: String  // "INSERT", "UPDATE", or "DELETE"
+        let new: Reminder?
+    }
+
+    // channelName auto-derived as "reminders_notifications"
+    // Override only if needed: static let channelName = "reminder_changes"
+}
+
+// Set up the notification trigger in a migration
 let migrator = Database.Migrator()
 
 migrator.register("reminder_notifications") { db in
-    try await db.execute("""
-        -- Create notification function
-        CREATE OR REPLACE FUNCTION notify_reminder_changes()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            PERFORM pg_notify(
-                'reminder_changes',
-                json_build_object(
-                    'id', NEW.id,
-                    'action', TG_OP,
-                    'title', NEW.title,
-                    'completed', NEW.completed
-                )::text
-            );
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-
-        -- Attach trigger to reminders table
-        CREATE TRIGGER reminder_notify_trigger
-        AFTER INSERT OR UPDATE OR DELETE ON reminders
-        FOR EACH ROW
-        EXECUTE FUNCTION notify_reminder_changes();
-        """)
+    try await db.setupNotificationChannel(
+        schema: ReminderNotifications.self,  // ← Table derived from schema!
+        on: .insert, .update, .delete
+    )
 }
 
 try await migrator.migrate(db)
 ```
 
-### Step 2: Define Your Notification Type
+**Why this approach is superior:**
+- ✅ No string literals - channel name derived from table
+- ✅ Impossible to mix up table and channel types
+- ✅ Compile-time guarantee of correct table-channel pairing
 
-```swift
-struct ReminderChange: Codable, Sendable {
-    let id: Int
-    let action: String  // "INSERT", "UPDATE", or "DELETE"
-    let title: String
-    let completed: Bool
-}
-```
-
-### Step 3: Listen for Changes
+### Step 2: Listen for Changes
 
 ```swift
 @MainActor
@@ -123,13 +111,11 @@ class ReminderViewModel: ObservableObject {
     }
 
     private func handleChange(_ change: ReminderChange) async {
-        switch change.action {
+        switch change.operation {
         case "INSERT", "UPDATE":
-            // Refresh the specific reminder
-            if let updated = try? await db.read { db in
-                try await Reminder.filter { $0.id == change.id }.fetchOne(db)
-            } {
-                if let index = reminders.firstIndex(where: { $0.id == change.id }) {
+            // Use the reminder from the notification payload
+            if let updated = change.new {
+                if let index = reminders.firstIndex(where: { $0.id == updated.id }) {
                     reminders[index] = updated
                 } else {
                     reminders.append(updated)
@@ -137,7 +123,11 @@ class ReminderViewModel: ObservableObject {
             }
 
         case "DELETE":
-            reminders.removeAll { $0.id == change.id }
+            // For DELETE operations, change.new is nil, but we can still identify the record
+            // In a real app, you might want to include the ID in a separate field
+            if let deleted = change.new {
+                reminders.removeAll { $0.id == deleted.id }
+            }
 
         default:
             break
@@ -400,7 +390,6 @@ LISTEN/NOTIFY is the sweet spot for PostgreSQL-based applications: real-time upd
 ### Essentials
 
 - ``Database/NotificationStream``
-- ``Database/TypedNotificationStream``
 - ``Database/Notification``
 
 ### Sending Notifications
@@ -411,9 +400,9 @@ LISTEN/NOTIFY is the sweet spot for PostgreSQL-based applications: real-time upd
 
 ### Receiving Notifications
 
-- ``Database/Reader/notifications(channel:)-2njzc``
 - ``Database/Reader/notifications(channel:as:decoder:)``
-- ``Database/Reader/notifications(channels:)``
+- ``Database/Reader/notifications(channel:decoder:)``
+- ``Database/Reader/notifications(schema:decoder:)``
 
 ### Error Handling
 

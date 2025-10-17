@@ -24,7 +24,8 @@ let package = Package(
 //            traits: ["StructuredQueriesPostgresTagged"]
 //        ),
         .package(
-            path: "../swift-structured-queries-postgres"
+            path: "../swift-structured-queries-postgres",
+            traits: ["StructuredQueriesPostgresTagged"]
         ),
         .package(url: "https://github.com/vapor/postgres-nio", from: "1.21.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.10.0"),
