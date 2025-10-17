@@ -267,6 +267,74 @@ extension Database.Reader {
         try await _notifications(channels: channels)
     }
 
+    // MARK: - Type-Safe Channel API
+
+    /// Listens for typed notifications on a type-safe channel.
+    ///
+    /// This method provides compile-time type safety by coupling the channel name
+    /// with its payload type. The returned stream automatically decodes JSON payloads.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// struct UserEvent: Codable, Sendable {
+    ///     let userID: Int
+    ///     let action: String
+    /// }
+    ///
+    /// let channel: Database.Notification.Channel<UserEvent> = "user_events"
+    ///
+    /// for try await event in try await db.notifications(channel: channel) {
+    ///     print("User \(event.userID) performed: \(event.action)")
+    /// }
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - channel: A type-safe channel that couples the name with the payload type
+    ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
+    /// - Returns: An AsyncSequence that yields decoded payloads
+    /// - Throws: Database errors, or decoding errors if payload is invalid JSON
+    public func notifications<Payload>(
+        channel: Database.Notification.Channel<Payload>,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async throws -> Database.TypedNotificationStream<Payload> {
+        try await notifications(channel: channel.name, as: Payload.self, decoder: decoder)
+    }
+
+    /// Listens for notifications using a notification channel schema.
+    ///
+    /// This method provides compile-time type safety through a schema that defines
+    /// both the channel name and payload type in one place.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// struct UserEventsChannel: NotificationChannelSchema {
+    ///     static let channelName = "user_events"
+    ///
+    ///     struct Payload: Codable, Sendable {
+    ///         let userID: Int
+    ///         let action: String
+    ///     }
+    /// }
+    ///
+    /// for try await event in try await db.notifications(schema: UserEventsChannel.self) {
+    ///     print("User \(event.userID) performed: \(event.action)")
+    /// }
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - schema: The notification channel schema type
+    ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
+    /// - Returns: An AsyncSequence that yields decoded payloads
+    /// - Throws: Database errors, or decoding errors if payload is invalid JSON
+    public func notifications<Schema: Database.Notification.ChannelSchema>(
+        schema: Schema.Type,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async throws -> Database.TypedNotificationStream<Schema.Payload> {
+        try await notifications(channel: Schema.channelName, as: Schema.Payload.self, decoder: decoder)
+    }
+
     /// Internal implementation of notification listening.
     ///
     /// This method handles the core logic:
@@ -454,5 +522,97 @@ extension Database.Writer {
         try await write { db in
             try await db.execute("NOTIFY \(channel)")
         }
+    }
+
+    // MARK: - Type-Safe Channel API
+
+    /// Sends a typed notification on a type-safe channel.
+    ///
+    /// This method provides compile-time type safety by ensuring the payload type
+    /// matches the channel's expected type.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// struct UserEvent: Codable, Sendable {
+    ///     let userID: Int
+    ///     let action: String
+    /// }
+    ///
+    /// let channel: Database.Notification.Channel<UserEvent> = "user_events"
+    ///
+    /// try await db.notify(
+    ///     channel: channel,
+    ///     payload: UserEvent(userID: 123, action: "login")
+    /// )
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - channel: A type-safe channel that couples the name with the payload type
+    ///   - payload: The Codable value to encode and send
+    ///   - encoder: Optional custom JSON encoder (default: JSONEncoder())
+    /// - Throws: Database errors or encoding errors
+    public func notify<Payload>(
+        channel: Database.Notification.Channel<Payload>,
+        payload: Payload,
+        encoder: JSONEncoder = JSONEncoder()
+    ) async throws {
+        try await notify(channel: channel.name, payload: payload, encoder: encoder)
+    }
+
+    /// Sends a notification using a notification channel schema.
+    ///
+    /// This method provides compile-time type safety through a schema that defines
+    /// both the channel name and payload type in one place.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// struct UserEventsChannel: NotificationChannelSchema {
+    ///     static let channelName = "user_events"
+    ///
+    ///     struct Payload: Codable, Sendable {
+    ///         let userID: Int
+    ///         let action: String
+    ///     }
+    /// }
+    ///
+    /// try await db.notify(
+    ///     schema: UserEventsChannel.self,
+    ///     payload: UserEventsChannel.Payload(userID: 123, action: "login")
+    /// )
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - schema: The notification channel schema type
+    ///   - payload: The payload value matching the schema's Payload type
+    ///   - encoder: Optional custom JSON encoder (default: JSONEncoder())
+    /// - Throws: Database errors or encoding errors
+    public func notify<Schema: Database.Notification.ChannelSchema>(
+        schema: Schema.Type,
+        payload: Schema.Payload,
+        encoder: JSONEncoder = JSONEncoder()
+    ) async throws {
+        try await notify(channel: Schema.channelName, payload: payload, encoder: encoder)
+    }
+
+    /// Sends a notification without a payload on a type-safe channel.
+    ///
+    /// This is useful for simple event notifications where the channel name
+    /// itself conveys all necessary information.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let channel: Database.Notification.Channel<Void> = "cache_invalidate"
+    /// try await db.notify(channel: channel)
+    /// ```
+    ///
+    /// - Parameter channel: A type-safe channel (typically with Void payload type)
+    /// - Throws: Database errors if the NOTIFY command fails
+    public func notify<Payload>(
+        channel: Database.Notification.Channel<Payload>
+    ) async throws {
+        try await notify(channel: channel.name)
     }
 }

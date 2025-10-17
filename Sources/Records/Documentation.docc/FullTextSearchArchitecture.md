@@ -234,7 +234,7 @@ The full-text search implementation spans two packages with clear separation of 
 
 **Responsibility**: Query building and SQL generation
 
-**Location**: `Sources/StructuredQueriesPostgresCore/PostgreSQL/FullTextSearch.swift`
+**Location**: `Sources/StructuredQueriesCore/PostgreSQL/FullTextSearch.swift`
 
 **Key Types**:
 - `FullTextSearchable` protocol
@@ -761,7 +761,7 @@ The implementation uses **two-layer testing** for comprehensive validation:
 
 ### Architecture
 
-**Location**: `swift-structured-queries-postgres/Sources/StructuredQueriesPostgresCore/PostgreSQL/FullTextSearch.swift`
+**Location**: `swift-structured-queries-postgres/Sources/StructuredQueriesCore/PostgreSQL/FullTextSearch.swift`
 
 **Responsibility**: Build type-safe queries that generate PostgreSQL full-text search SQL.
 

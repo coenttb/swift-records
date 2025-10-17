@@ -1,6 +1,5 @@
 import Foundation
 import StructuredQueriesPostgres
-import StructuredQueriesPostgresSupport
 import PostgresNIO
 
 // MARK: - Supporting Types
