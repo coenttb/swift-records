@@ -32,6 +32,9 @@ extension Database {
     ///     print("Reminder \(change.id) was \(change.action)")
     /// }
     /// ```
+    ///
+    /// If you need access to notification metadata (channel, backendPID), use
+    /// `notificationEvents()` instead to get `NotificationEvent<Payload>` with full context.
     public struct NotificationStream<Payload: Decodable & Sendable>: AsyncSequence, Sendable {
         public typealias Element = Payload
 
@@ -69,6 +72,79 @@ extension Database {
 
                 do {
                     return try decoder.decode(Payload.self, from: data)
+                } catch {
+                    throw Database.Error.notificationDecodingFailed(
+                        type: String(describing: Payload.self),
+                        payload: notification.payload,
+                        underlying: error
+                    )
+                }
+            }
+        }
+    }
+
+    /// A stream of notification events with full metadata (payload + channel + backendPID).
+    ///
+    /// This stream type provides access to both the decoded payload and notification metadata.
+    /// Use this when you need to know which channel or backend sent the notification.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// struct UserAction: Codable {
+    ///     let userID: Int
+    ///     let action: String
+    /// }
+    ///
+    /// let stream = try await db.notificationEvents(on: channel, expecting: UserAction.self)
+    ///
+    /// for try await event in stream {
+    ///     print("User \(event.payload.userID) did \(event.payload.action)")
+    ///     print("From backend: \(event.backendPID)")
+    /// }
+    /// ```
+    public struct NotificationEventStream<Payload: Decodable & Sendable>: AsyncSequence, Sendable {
+        public typealias Element = NotificationEvent<Payload>
+
+        private let base: AsyncThrowingStream<Notification, any Swift.Error>
+        private let decoder: JSONDecoder
+
+        init(base: AsyncThrowingStream<Notification, any Swift.Error>, decoder: JSONDecoder = JSONDecoder()) {
+            self.base = base
+            self.decoder = decoder
+        }
+
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(base: base.makeAsyncIterator(), decoder: decoder)
+        }
+
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            private var base: AsyncThrowingStream<Notification, any Swift.Error>.AsyncIterator
+            private let decoder: JSONDecoder
+
+            init(base: AsyncThrowingStream<Notification, any Swift.Error>.AsyncIterator, decoder: JSONDecoder) {
+                self.base = base
+                self.decoder = decoder
+            }
+
+            public mutating func next() async throws -> NotificationEvent<Payload>? {
+                guard let notification = try await base.next() else {
+                    return nil
+                }
+
+                guard let data = notification.payload.data(using: .utf8) else {
+                    throw Database.Error.invalidNotificationPayload(
+                        "Payload is not valid UTF-8: \(notification.payload)"
+                    )
+                }
+
+                do {
+                    let payload = try decoder.decode(Payload.self, from: data)
+                    return NotificationEvent(
+                        payload: payload,
+                        channel: notification.channel,
+                        backendPID: notification.backendPID
+                    )
                 } catch {
                     throw Database.Error.notificationDecodingFailed(
                         type: String(describing: Payload.self),
@@ -207,19 +283,123 @@ extension Database.Reader {
         try await notifications(on: Schema.channelName, expecting: Schema.Payload.self, decoder: decoder)
     }
 
+    // MARK: - Notification Events API (with metadata)
+
+    /// Listens for notification events with full metadata (payload + channel + backendPID).
+    ///
+    /// This method is similar to `notifications()` but returns `NotificationEvent<Payload>`
+    /// instead of just `Payload`, giving you access to the channel name and backend process ID.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// struct ReminderChange: Codable {
+    ///     let id: Int
+    ///     let action: String
+    /// }
+    ///
+    /// let (stream, ready) = try await db.notificationEvents(on: channel, expecting: ReminderChange.self)
+    ///
+    /// Task {
+    ///     for try await event in stream {
+    ///         print("Change: \(event.payload)")
+    ///         print("Channel: \(event.channel)")
+    ///         print("Backend PID: \(event.backendPID)")
+    ///     }
+    /// }
+    ///
+    /// for await _ in ready { break }
+    /// try await db.notify(channel: channel, payload: myChange)
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - channel: The type-safe PostgreSQL channel name to listen on
+    ///   - type: The Codable type to decode payloads into (can be inferred from context)
+    ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
+    /// - Returns: A tuple of (notification event stream, readiness signal)
+    /// - Throws: Database errors, or decoding errors if payload is invalid JSON
+    public func notificationEvents<Payload: Decodable & Sendable>(
+        on channel: ChannelName,
+        expecting type: Payload.Type = Payload.self,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async throws -> (stream: Database.NotificationEventStream<Payload>, ready: AsyncStream<Void>) {
+        try await _notificationEvents(channel: channel.rawValue, decoder: decoder)
+    }
+
+    /// Listens for notification events on a type-safe channel.
+    ///
+    /// - Parameters:
+    ///   - channel: A type-safe channel that couples the name with the payload type
+    ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
+    /// - Returns: A tuple of (notification event stream, readiness signal)
+    /// - Throws: Database errors, or decoding errors if payload is invalid JSON
+    public func notificationEvents<Payload>(
+        on channel: Database.Notification.Channel<Payload>,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async throws -> (stream: Database.NotificationEventStream<Payload>, ready: AsyncStream<Void>) {
+        try await notificationEvents(on: channel.name, expecting: Payload.self, decoder: decoder)
+    }
+
+    /// Listens for notification events using a notification channel schema.
+    ///
+    /// - Parameters:
+    ///   - schema: The notification channel schema type
+    ///   - decoder: Optional custom JSON decoder (default: JSONDecoder())
+    /// - Returns: A tuple of (notification event stream, readiness signal)
+    /// - Throws: Database errors, or decoding errors if payload is invalid JSON
+    public func notificationEvents<Schema: Database.Notification.ChannelSchema>(
+        from schema: Schema.Type,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async throws -> (stream: Database.NotificationEventStream<Schema.Payload>, ready: AsyncStream<Void>) {
+        try await notificationEvents(on: Schema.channelName, expecting: Schema.Payload.self, decoder: decoder)
+    }
+
     /// Internal implementation with readiness signaling.
     ///
-    /// Returns both the notification stream and a readiness signal that yields
-    /// once when the LISTEN command completes successfully. The stream is returned
-    /// immediately, and LISTEN executes asynchronously.
-    ///
-    /// This implementation uses either:
-    /// - The dedicated notification client (if available and running)
-    /// - The database's own PostgresClient (fallback for tests and simple cases)
+    /// This reuses the primitive `_rawNotifications()` and wraps it with
+    /// `NotificationStream` to decode just the payload.
     private func _notifications<Payload: Decodable & Sendable>(
         channel: String,
         decoder: JSONDecoder
     ) async throws -> (stream: Database.NotificationStream<Payload>, ready: AsyncStream<Void>) {
+
+        // Get the raw notification stream (primitive)
+        let (rawStream, ready) = try await _rawNotifications(channel: channel)
+
+        // Wrap with NotificationStream (composition)
+        let typedStream = Database.NotificationStream<Payload>(base: rawStream, decoder: decoder)
+
+        return (typedStream, ready)
+    }
+
+    /// Internal implementation for notification events with full metadata.
+    ///
+    /// This reuses the primitive `_rawNotifications()` and wraps it with
+    /// `NotificationEventStream` to expose metadata alongside decoded payload.
+    private func _notificationEvents<Payload: Decodable & Sendable>(
+        channel: String,
+        decoder: JSONDecoder
+    ) async throws -> (stream: Database.NotificationEventStream<Payload>, ready: AsyncStream<Void>) {
+
+        // Get the raw notification stream (primitive)
+        let (rawStream, ready) = try await _rawNotifications(channel: channel)
+
+        // Wrap with NotificationEventStream (composition)
+        let eventStream = Database.NotificationEventStream<Payload>(
+            base: rawStream,
+            decoder: decoder
+        )
+
+        return (eventStream, ready)
+    }
+
+    /// Primitive: raw notification stream without decoding.
+    ///
+    /// This is the foundational implementation that both `NotificationStream`
+    /// and `NotificationEventStream` compose upon.
+    private func _rawNotifications(
+        channel: String
+    ) async throws -> (stream: AsyncThrowingStream<Database.Notification, any Swift.Error>, ready: AsyncStream<Void>) {
 
         // Try to resolve a client from the database connection
         let useClient: PostgresClient
@@ -307,10 +487,7 @@ extension Database.Reader {
             }
         }
 
-        // Wrap raw stream with typed decoder
-        let typedStream = Database.NotificationStream<Payload>(base: notificationStream, decoder: decoder)
-
-        return (typedStream, readyStream)
+        return (notificationStream, readyStream)
     }
 }
 

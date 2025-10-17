@@ -2,6 +2,40 @@ import Foundation
 import StructuredQueriesPostgres
 
 extension Database {
+    /// A notification event with full metadata (channel, payload, backend PID).
+    ///
+    /// This type wraps a decoded notification payload with its metadata from PostgreSQL.
+    /// Use this when you need access to both the payload data and notification context.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let stream = try await db.notificationEvents(on: channel, expecting: MyPayload.self)
+    ///
+    /// for try await event in stream {
+    ///     print("Payload: \(event.payload)")
+    ///     print("Channel: \(event.channel)")
+    ///     print("Backend PID: \(event.backendPID)")
+    /// }
+    /// ```
+    public struct NotificationEvent<Payload: Decodable & Sendable>: Sendable {
+        /// The decoded notification payload
+        public let payload: Payload
+
+        /// The channel on which this notification was received
+        public let channel: ChannelName
+
+        /// The backend process ID that sent the notification
+        public let backendPID: Int32
+
+        /// Creates a notification event
+        public init(payload: Payload, channel: ChannelName, backendPID: Int32) {
+            self.payload = payload
+            self.channel = channel
+            self.backendPID = backendPID
+        }
+    }
+
     /// A notification message received from PostgreSQL LISTEN/NOTIFY.
     ///
     /// Notifications are sent by PostgreSQL when a NOTIFY command is executed
