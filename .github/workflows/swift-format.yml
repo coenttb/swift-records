@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.0'
+
       - name: Cache swift-format
         id: cache-swift-format
         uses: actions/cache@v4
