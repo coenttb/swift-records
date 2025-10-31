@@ -1,8 +1,7 @@
 # Swift Records
 
-![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
-![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20macOS%20%7C%20tvOS%20%7C%20watchOS-blue.svg)
-![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
+[![CI](https://github.com/coenttb/swift-records/workflows/CI/badge.svg)](https://github.com/coenttb/swift-records/actions/workflows/ci.yml)
+![Development Status](https://img.shields.io/badge/status-active--development-blue.svg)
 
 A high-level, type-safe database abstraction layer for PostgreSQL in Swift, built on [StructuredQueries](https://github.com/pointfreeco/swift-structured-queries) and [PostgresNIO](https://github.com/vapor/postgres-nio), inspired by GRDB.
 
