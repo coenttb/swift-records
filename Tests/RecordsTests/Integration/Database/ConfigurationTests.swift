@@ -11,14 +11,11 @@ struct ConfigurationTests {
 
   @Test("Configuration from environment variables")
   func testConfigurationFromEnvironment() async throws {
-    // This test verifies that PostgresClient.Configuration.fromEnvironment() can successfully
-    // create a configuration when environment variables are properly set.
-    // The actual values vary by environment (local dev vs CI), so we just verify
-    // that the configuration can be created without throwing an error.
     let config = try PostgresClient.Configuration.fromEnvironment()
-
-    // Verify standard port is used
+    #expect(config.host == "localhost")
     #expect(config.port == 5432)
+    #expect(config.database == "test_db")
+    #expect(config.username == "postgres")
   }
 
   @Test("Database single connection initialization")

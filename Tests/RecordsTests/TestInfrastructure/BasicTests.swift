@@ -17,8 +17,8 @@ struct BasicTests {
     let config = try PostgresClient.Configuration.fromEnvironment()
     #expect(config.host == "localhost")
     #expect(config.port == 5432)
-    #expect(config.database == "swift-records-development")
-    #expect(config.username == "coenttb")
+    #expect(config.database == "test_db")
+    #expect(config.username == "postgres")
   }
 }
 
