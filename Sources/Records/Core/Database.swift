@@ -39,7 +39,7 @@ import Foundation
 ///         try await prepareDependencies {
 ///             $0.defaultDatabase = database
 ///         }
-///         
+///
 ///         // Run your app
 ///     }
 /// }
@@ -55,13 +55,13 @@ import Foundation
 ///
 /// struct UserService {
 ///     @Dependency(\.defaultDatabase) var db
-///     
+///
 ///     func fetchUsers() async throws -> [User] {
 ///         try await db.read { db in
 ///             try await User.fetchAll(db)
 ///         }
 ///     }
-///     
+///
 ///     func createUser(name: String, email: String) async throws {
 ///         try await db.write { db in
 ///             try await User.insert {
@@ -149,5 +149,5 @@ import Foundation
 /// }
 /// ```
 public enum Database {
-    // Namespace holder - never instantiated
+  // Namespace holder - never instantiated
 }

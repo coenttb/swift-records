@@ -63,12 +63,12 @@ public struct PostgresQueryDecoder: QueryDecoder {
     if let value = try? column.decode(Int64.self) {
       return value
     }
-    
+
     // Fall back to Decimal for NUMERIC types (from SUM operations)
     if let decimal = try? column.decode(Decimal.self) {
       return NSDecimalNumber(decimal: decimal).int64Value
     }
-    
+
     // If neither works, throw the original error
     return try column.decode(Int64.self)
   }
@@ -108,12 +108,12 @@ public struct PostgresQueryDecoder: QueryDecoder {
     if let value = try? column.decode(Int.self) {
       return value
     }
-    
+
     // Fall back to Decimal for NUMERIC types (from SUM operations)
     if let decimal = try? column.decode(Decimal.self) {
       return NSDecimalNumber(decimal: decimal).intValue
     }
-    
+
     // If neither works, throw the original error
     return try column.decode(Int.self)
   }
@@ -149,7 +149,7 @@ public struct PostgresQueryDecoder: QueryDecoder {
 
     return try column.decode(UUID.self)
   }
-  
+
   public mutating func decode(_ columnType: Decimal.Type) throws -> Decimal? {
     defer { currentIndex += 1 }
     let column = row[currentIndex]

@@ -17,7 +17,8 @@ struct SimpleSelect<QueryValue>: PartialSelectStatement {
   )
   where
     repeat (each C).QueryValue: QueryRepresentable,
-    QueryValue == (repeat (each C).QueryValue) {
+    QueryValue == (repeat (each C).QueryValue)
+  {
     let columns = [QueryFragment](repeat each selection())
     query = "SELECT \(columns.joined(separator: ", "))"
   }
