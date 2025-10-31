@@ -7,14 +7,14 @@ A high-level, type-safe database abstraction layer for PostgreSQL in Swift, buil
 
 ## Features
 
-- 🏊 **Connection Pooling**: Automatic connection lifecycle management with configurable pool sizes
-- 🔄 **Transactions**: Full transaction support with isolation levels and savepoints
-- 📦 **Migrations**: Version-tracked schema migrations with automatic execution
-- 🔍 **Full-Text Search**: Type-safe PostgreSQL full-text search with highlighting and ranking
-- 🧪 **Testing Utilities**: Schema isolation for parallel test execution
-- 🎯 **Type Safety**: Leverages Swift's type system and StructuredQueries for compile-time guarantees
-- 🚀 **Actor-Based Concurrency**: Safe multi-threaded database access with Swift 6.0 concurrency
-- 🔌 **Dependency Injection**: Seamless integration with Point-Free's Dependencies library
+- **Connection Pooling**: Automatic connection lifecycle management with configurable pool sizes
+- **Transactions**: Full transaction support with isolation levels and savepoints
+- **Migrations**: Version-tracked schema migrations with automatic execution
+- **Full-Text Search**: Type-safe PostgreSQL full-text search with highlighting and ranking
+- **Testing Utilities**: Schema isolation for parallel test execution
+- **Type Safety**: Leverages Swift's type system and StructuredQueries for compile-time guarantees
+- **Actor-Based Concurrency**: Safe multi-threaded database access with Swift 6.0 concurrency
+- **Dependency Injection**: Seamless integration with Point-Free's Dependencies library
 
 ## Installation
 
