@@ -38,6 +38,9 @@ let package = Package(
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(name: "EnvironmentVariables", package: "swift-environment-variables"),
                 .product(name: "IssueReporting", package: "xctest-dynamic-overlay")
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("AccessLevelOnImport")
             ]
         ),
         .target(

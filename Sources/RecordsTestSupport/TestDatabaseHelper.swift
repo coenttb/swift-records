@@ -1,9 +1,8 @@
 import Dependencies
 import Foundation
+import Records
 import StructuredQueriesPostgres
 import Testing
-
-@testable import Records
 
 // MARK: - Test Database Setup (Reminder Schema - Upstream Compatible)
 //
