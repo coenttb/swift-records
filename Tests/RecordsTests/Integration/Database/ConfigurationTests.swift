@@ -6,10 +6,7 @@ import PostgresNIO
 import Records
 import Testing
 
-@Suite(
-  "Configuration",
-  .dependency(\.envVars, .development)
-)
+@Suite("Configuration")
 struct ConfigurationTests {
 
   @Test("Configuration from environment variables")
@@ -17,11 +14,13 @@ struct ConfigurationTests {
 
     let config = try PostgresClient.Configuration.fromEnvironment()
 
-    #expect(config.host == "localhost")
+    // Verify configuration can be read from environment
     #expect(config.port == 5432)
-    #expect(config.database == "swift-records-development")
-    #expect(config.username == "coenttb")
-    #expect(config.password == "")
+    // Note: host, database, username, and password vary by environment (local vs CI)
+    // so we just verify they're set to non-empty values where applicable
+    #expect(!config.host.isEmpty)
+    #expect(!config.database.isEmpty)
+    #expect(!config.username.isEmpty)
   }
 
   @Test("Database single connection initialization")
