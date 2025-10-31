@@ -883,6 +883,24 @@ For contributors and those interested in the package's development history:
   - Final solution: Direct database creation for parallel test execution
   - Best practices and troubleshooting
 
+## Related Packages
+
+### Dependencies
+
+- [swift-environment-variables](https://github.com/coenttb/swift-environment-variables): A Swift package for type-safe environment variable management.
+
+### Used By
+
+- [coenttb-newsletter](https://github.com/coenttb/coenttb-newsletter): A Swift package for newsletter subscription and email management.
+- [swift-identities](https://github.com/coenttb/swift-identities): The Swift library for identity authentication and management.
+
+### Third-Party Dependencies
+
+- [pointfreeco/swift-dependencies](https://github.com/pointfreeco/swift-dependencies): A dependency management library for controlling dependencies in Swift.
+- [pointfreeco/swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing): Delightful snapshot testing for Swift.
+- [pointfreeco/xctest-dynamic-overlay](https://github.com/pointfreeco/xctest-dynamic-overlay): Define XCTest assertion helpers directly in production code.
+- [vapor/postgres-nio](https://github.com/vapor/postgres-nio): Non-blocking, event-driven Swift client for PostgreSQL.
+
 ## Dependencies
 
 This package builds on excellent work from:
