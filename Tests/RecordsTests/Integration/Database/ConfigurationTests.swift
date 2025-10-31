@@ -12,7 +12,8 @@ struct ConfigurationTests {
   @Test("Configuration from environment variables")
   func testConfigurationFromEnvironment() async throws {
     let config = try PostgresClient.Configuration.fromEnvironment()
-    #expect(config.host == "localhost")
+    // Host can be "localhost" (macOS CI) or "postgres" (Ubuntu CI service name)
+    #expect(config.host == "localhost" || config.host == "postgres")
     #expect(config.port == 5432)
     #expect(config.database == "test_db")
     #expect(config.username == "postgres")
