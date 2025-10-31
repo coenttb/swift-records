@@ -4,10 +4,7 @@ import PostgresNIO
 import RecordsTestSupport
 import Testing
 
-@Suite(
-  "Basic",
-  .dependency(\.envVars, .development),
-)
+@Suite("Basic")
 struct BasicTests {
   @Test
   func packageCompiles() async throws {
