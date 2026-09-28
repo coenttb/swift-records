@@ -44,7 +44,7 @@ let package = Package(
         // L2 — Tagged functor for type-safe SQL identifiers (ChannelName/FunctionName/
         // TriggerName). Replaces pointfreeco/swift-tagged.
         .package(
-            url: "https://github.com/swift-molecules/swift-tagged.git",
+            url: "https://github.com/swift-atoms/swift-tagged.git",
             branch: "main"
         ),
         // Environment-variable idiom (EnvVars + \.envVars). Formerly ServerFoundationEnvVars (ssf dissolved, W3).
@@ -81,10 +81,6 @@ let package = Package(
                 .product(name: "Byte", package: "swift-byte"),
                 .product(name: "Time", package: "swift-time"),
                 .product(name: "Tagged", package: "swift-tagged"),
-                .product(
-                    name: "Tagged Standard Library Integration",
-                    package: "swift-tagged"
-                ),
                 .product(name: "PostgresNIO", package: "postgres-nio"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
                 .product(
