@@ -1,102 +1,102 @@
-// swift-tools-version: 6.3.3
+// swift-tools-version: 6.4
 
 import PackageDescription
 
 let package = Package(
-    name: "swift-records",
+    name: "swift-postgresql",
     platforms: [
-        .macOS("27"),
-        .iOS("27"),
-        .tvOS("27"),
-        .watchOS("27"),
-        .visionOS("27"),
+        .macOS(.v27),
+        .iOS(.v27),
+        .tvOS(.v27),
+        .watchOS(.v27),
+        .visionOS(.v27),
     ],
     products: [
-        .library(
-            name: "Records",
-            targets: ["Records"]
-        )
+        .library(name: "PostgreSQL", targets: ["PostgreSQL"]),
+        .library(name: "PostgreSQL Test Support", targets: ["PostgreSQL Test Support"]),
+    ],
+    traits: [
+        .trait(name: "PostgresNIO", description: "Connection, pools, transactions, notifications and decoding over PostgresNIO"),
+        .trait(name: "Tagged", description: "PostgreSQL conformances for swift-atoms Tagged"),
     ],
     dependencies: [
-        // L3 — institute-native PostgreSQL-dialect DSL (re-exports L2 Structured
-        // Queries). Replaces the pointfreeco swift-structured-queries-postgres fork.
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
+        .package(url: "https://github.com/pointfreeco/swift-custom-dump.git", from: "1.3.3"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing.git", from: "1.18.4"),
         .package(
-            url: "https://github.com/swift-standards/swift-postgresql-standard.git",
-            branch: "main"
+            url: "https://github.com/swift-compositions/swift-sql.git",
+            branch: "main",
+            traits: [.trait(name: "Tagged", condition: .when(traits: ["Tagged"]))]
         ),
-        // L2 — identifier/string quoting helpers (FullTextSearch SQL emission).
-        .package(
-            url: "https://github.com/swift-molecules/swift-structured-queries.git",
-            branch: "main"
-        ),
-        // L2 — `Byte`, the element type of `QueryBinding`'s blob/jsonb payloads and
-        // of the `QueryDecoder` blob requirement since the L2 Foundation drain.
-        .package(
-            url: "https://github.com/swift-molecules/swift-byte.git",
-            branch: "main"
-        ),
-        // L2 — `Instant`, the payload of `QueryBinding.date`/`.dateArray` and of the
-        // `QueryDecoder` timestamp requirement since the same drain.
-        .package(
-            url: "https://github.com/swift-molecules/swift-time.git",
-            branch: "main"
-        ),
-        // L2 — Tagged functor for type-safe SQL identifiers (ChannelName/FunctionName/
-        // TriggerName). Replaces pointfreeco/swift-tagged.
-        .package(
-            url: "https://github.com/swift-atoms/swift-tagged.git",
-            branch: "main"
-        ),
-        // Environment-variable idiom (EnvVars + \.envVars). Formerly ServerFoundationEnvVars (ssf dissolved, W3).
-        .package(
-            url: "https://github.com/swift-compositions/swift-environment-dependencies.git",
-            branch: "main"
-        ),
-        // Wire execution (PostgresNIO confined to Core/PostgresNIO/ + the config entry points).
-        .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.21.0"),
-        .package(
-            url: "https://github.com/swift-compositions/swift-dependencies.git",
-            branch: "main"
-        ),
+        .package(url: "https://github.com/swift-atoms/swift-byte.git", branch: "main"),
+        .package(url: "https://github.com/swift-iso/swift-iso-9075.git", branch: "main"),
+        .package(url: "https://github.com/swift-ietf/swift-rfc-4122.git", branch: "main"),
+        .package(url: "https://github.com/swift-atoms/swift-tagged.git", branch: "main"),
+        .package(url: "https://github.com/swift-atoms/swift-time.git", branch: "main"),
+        .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.33.0"),
     ],
     targets: [
         .target(
-            name: "Records",
+            name: "PostgreSQL",
             dependencies: [
-                .product(name: "PostgreSQL Standard", package: "swift-postgresql-standard"),
-                .product(name: "PostgreSQL Standard Macros", package: "swift-postgresql-standard"),
-                .product(
-                    name: "Structured Queries Support",
-                    package: "swift-structured-queries"
-                ),
-                // Wire execution is PostgresNIO's, whose column codecs are Foundation
-                // types (`Date`, `UUID`, `Data`). The L2 core no longer speaks them,
-                // so this opt-in integration supplies the bridges the PostgresNIO
-                // boundary needs (`Date.instant`, `Date.init(_ instant:)`,
-                // `QueryBinding.UUID.init(_ uuid:)`, `UUID.init?(_ identifier:)`).
-                .product(
-                    name: "Structured Queries Foundation Integration",
-                    package: "swift-structured-queries"
-                ),
+                .product(name: "SQL", package: "swift-sql"),
+                .product(name: "ISO 9075 Foundation", package: "swift-iso-9075"),
+                .product(name: "ISO 9075 Call-Level Interface", package: "swift-iso-9075"),
                 .product(name: "Byte", package: "swift-byte"),
                 .product(name: "Time", package: "swift-time"),
-                .product(name: "Tagged", package: "swift-tagged"),
-                .product(name: "PostgresNIO", package: "postgres-nio"),
-                .product(name: "Dependencies", package: "swift-dependencies"),
-                .product(
-                    name: "Environment Dependencies",
-                    package: "swift-environment-dependencies"
-                ),
+                .product(name: "RFC 4122", package: "swift-rfc-4122"),
+                .product(name: "PostgresNIO", package: "postgres-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "Logging", package: "swift-log", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "Tagged", package: "swift-tagged", condition: .when(traits: ["Tagged"])),
             ]
-        )
+        ),
+        .target(
+            name: "PostgreSQL Test Support",
+            dependencies: [
+                "PostgreSQL",
+                .product(name: "SQL", package: "swift-sql"),
+                .product(name: "SQL Test Support", package: "swift-sql"),
+                .product(name: "ISO 9075 Foundation", package: "swift-iso-9075"),
+                .product(name: "CustomDump", package: "swift-custom-dump"),
+                .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),
+                .product(name: "PostgresNIO", package: "postgres-nio", condition: .when(traits: ["PostgresNIO"])),
+            ]
+        ),
+        .testTarget(
+            name: "PostgreSQL Tests",
+            dependencies: [
+                "PostgreSQL",
+                "PostgreSQL Test Support",
+                .product(name: "SQL", package: "swift-sql"),
+                .product(name: "SQL Macros", package: "swift-sql"),
+                .product(name: "SQL Migrations", package: "swift-sql"),
+                .product(name: "ISO 9075 Foundation", package: "swift-iso-9075"),
+                .product(name: "ISO 9075 Call-Level Interface", package: "swift-iso-9075"),
+                .product(name: "Byte", package: "swift-byte"),
+                .product(name: "Time", package: "swift-time"),
+                .product(name: "RFC 4122", package: "swift-rfc-4122"),
+                .product(name: "CustomDump", package: "swift-custom-dump"),
+                .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),
+                .product(name: "PostgresNIO", package: "postgres-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "Tagged", package: "swift-tagged", condition: .when(traits: ["Tagged"])),
+            ]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
 
-let swiftSettings: [SwiftSetting] = [
-    .enableUpcomingFeature("MemberImportVisibility")
-]
+for target in package.targets where ![.system, .binary, .plugin].contains(target.type) {
+    let ecosystem: [SwiftSetting] = [
+        .strictMemorySafety(),
+        .enableUpcomingFeature("ExistentialAny"),
+        .enableUpcomingFeature("InternalImportsByDefault"),
+        .enableUpcomingFeature("MemberImportVisibility"),
+        .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+        .enableUpcomingFeature("InferIsolatedConformances"),
+    ]
 
-for index in package.targets.indices {
-    package.targets[index].swiftSettings = swiftSettings
+    target.swiftSettings = (target.swiftSettings ?? []) + ecosystem
 }

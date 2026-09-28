@@ -1,5 +1,5 @@
 # .github/metadata.yaml
-description: "Type-safe, high-level PostgreSQL database abstraction built on StructuredQueries and PostgresNIO for Swift."
+description: "The PostgreSQL dialect for swift-sql, with a PostgresNIO runtime behind a trait."
 topics:
   - compositions
   - postgresql
