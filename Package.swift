@@ -60,9 +60,12 @@ let package = Package(
                 .product(name: "SQL", package: "swift-sql"),
                 .product(name: "SQL Test Support", package: "swift-sql"),
                 .product(name: "ISO 9075 Foundation", package: "swift-iso-9075"),
+                .product(name: "ISO 9075 Call-Level Interface", package: "swift-iso-9075"),
                 .product(name: "CustomDump", package: "swift-custom-dump"),
                 .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),
                 .product(name: "PostgresNIO", package: "postgres-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "Logging", package: "swift-log", condition: .when(traits: ["PostgresNIO"])),
             ]
         ),
         .testTarget(
@@ -81,6 +84,8 @@ let package = Package(
                 .product(name: "CustomDump", package: "swift-custom-dump"),
                 .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),
                 .product(name: "PostgresNIO", package: "postgres-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["PostgresNIO"])),
+                .product(name: "Logging", package: "swift-log", condition: .when(traits: ["PostgresNIO"])),
                 .product(name: "Tagged", package: "swift-tagged", condition: .when(traits: ["Tagged"])),
             ]
         ),
