@@ -33,10 +33,10 @@
                 case .int2, .int4, .int8, .oid: .int(try decoded(Int64.self))
                 case .float4, .float8: .double(try decoded(Double.self))
                 case .numeric: .decimal(try decoded(Decimal.self).description)
-                case .bytea: .blob(try decoded(ByteBuffer.self).readableBytesView.map(Byte.init))
+                case .bytea: .blob(try decoded(ByteBuffer.self).readableBytesView.map(Byte.init(bitPattern:)))
                 case .timestamp, .timestamptz, .date: .timestamp(Time.Instant(try decoded(Date.self)))
                 case .uuid: .uuid(RFC_4122.UUID(bytes: try decoded(Foundation.UUID.self).uuid))
-                case .json, .jsonb: .json(try decoded(String.self).utf8.map(Byte.init))
+                case .json, .jsonb: .json(try decoded(String.self).utf8.map(Byte.init(bitPattern:)))
                 case .boolArray, .int2Array, .int4Array, .int8Array, .float4Array, .float8Array, .textArray, .varcharArray,
                     .bpcharArray, .nameArray, .uuidArray, .timestampArray, .timestamptzArray, .dateArray:
                     .text(try arrayLiteral)

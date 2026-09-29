@@ -24,7 +24,7 @@ enum CoreFixtures {
     struct Text: QueryDecoder {
         var text: String?
 
-        mutating func decode(_ columnType: [Byte].Type) throws(QueryDecodingError) -> [Byte]? { text.map { $0.utf8.map(Byte.init) } }
+        mutating func decode(_ columnType: [Byte].Type) throws(QueryDecodingError) -> [Byte]? { text.map { $0.utf8.map(Byte.init(bitPattern:)) } }
         mutating func decode(_ columnType: Double.Type) throws(QueryDecodingError) -> Double? { text.flatMap(Double.init) }
         mutating func decode(_ columnType: Int64.Type) throws(QueryDecodingError) -> Int64? { text.flatMap { Int64($0) } }
         mutating func decode(_ columnType: UInt64.Type) throws(QueryDecodingError) -> UInt64? { text.flatMap { UInt64($0) } }
@@ -40,6 +40,19 @@ enum CoreFixtures {
     @Test func `numbers its placeholders`() {
         let rendering = PostgreSQL().render("SELECT \(ISO_9075.Value.int(1)), \(ISO_9075.Value.text("a"))")
         #expect(rendering == ISO_9075.Rendering(sql: "SELECT $1, $2", values: [.int(1), .text("a")]))
+    }
+
+    @Test func `inlines an instant as a UTC TIMESTAMPTZ`() throws {
+        let instant = try Time.Instant(secondsSinceUnixEpoch: 1_767_225_600, nanosecondFraction: 250_000_000)
+        #expect(try PostgreSQL().inline("\(ISO_9075.Value.timestamp(instant))") == "TIMESTAMPTZ '2026-01-01 00:00:00.250+00'")
+    }
+
+    @Test func `inlines bytes as BYTEA`() throws {
+        #expect(try PostgreSQL().inline("\(ISO_9075.Value.blob([0x01, 0xAB].map(Byte.init(bitPattern:))))") == #"'\x01ab'::BYTEA"#)
+    }
+
+    @Test func `inlines array elements in the dialect`() throws {
+        #expect(try PostgreSQL().inline("\(ISO_9075.Value.array([.blob([Byte(bitPattern: 0xFF)])]))") == #"ARRAY['\xff'::BYTEA]"#)
     }
 
     @Test func `spells an absent primary key as DEFAULT`() {
@@ -156,7 +169,7 @@ enum CoreFixtures {
 @Suite struct `JSONB` {
     @Test func `binds its value as JSON with sorted keys`() {
         let value = PostgreSQL.JSONB(queryOutput: CoreFixtures.Settings(theme: "dark", isCompact: true))
-        #expect(value.queryBinding == .json(Array(#"{"isCompact":true,"theme":"dark"}"#.utf8).map(Byte.init)))
+        #expect(value.queryBinding == .json(Array(#"{"isCompact":true,"theme":"dark"}"#.utf8).map(Byte.init(bitPattern:))))
     }
 
     @Test func `decodes its value from JSON text`() throws {

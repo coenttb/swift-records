@@ -19,7 +19,7 @@ extension PostgreSQL.Window.Frame {
         }
 
         private static func offset(_ offset: Int, _ direction: String) -> ISO_9075.Fragment {
-            precondition(offset > 0, "\(direction) offset must be positive, got \(offset)")
+            precondition(offset >= 0, "a \(direction) offset must not be negative, got \(offset)")
             return "\(raw: offset) \(raw: direction)"
         }
     }

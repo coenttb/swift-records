@@ -25,9 +25,14 @@ import Testing
         #expect(PostgreSQL().render(measurement.value.sign().queryFragment).sql == #"sign("measurements"."value")"#)
     }
 
-    @Test func `truncation inlines its decimal places`() {
+    @Test func `rounding to decimal places goes through numeric`() {
+        let rendering = PostgreSQL().render(measurement.value.round(decimalPlaces: 2).queryFragment)
+        #expect(rendering == ISO_9075.Rendering(sql: #"round(CAST("measurements"."value" AS NUMERIC), 2)"#, values: []))
+    }
+
+    @Test func `truncation to decimal places goes through numeric`() {
         let rendering = PostgreSQL().render(measurement.value.trunc(decimalPlaces: 2).queryFragment)
-        #expect(rendering == ISO_9075.Rendering(sql: #"trunc("measurements"."value", 2)"#, values: []))
+        #expect(rendering == ISO_9075.Rendering(sql: #"trunc(CAST("measurements"."value" AS NUMERIC), 2)"#, values: []))
     }
 
     @Test func `integer division binds a value divisor`() {
@@ -52,12 +57,12 @@ import Testing
         #expect(PostgreSQL().render(measurement.value.cbrt().queryFragment).sql == #"cbrt("measurements"."value")"#)
         #expect(PostgreSQL().render(measurement.value.exp().queryFragment).sql == #"exp("measurements"."value")"#)
         #expect(PostgreSQL().render(measurement.value.ln().queryFragment).sql == #"ln("measurements"."value")"#)
-        #expect(PostgreSQL().render(measurement.value.log10().queryFragment).sql == #"log("measurements"."value")"#)
+        #expect(PostgreSQL().render(measurement.value.log10().queryFragment).sql == #"log10("measurements"."value")"#)
     }
 
-    @Test func `a logarithm binds its base first`() {
+    @Test func `a logarithm with a base goes through numeric`() {
         let rendering = PostgreSQL().render(measurement.value.log(base: 2.0).queryFragment)
-        #expect(rendering == ISO_9075.Rendering(sql: #"log($1, "measurements"."value")"#, values: [.double(2)]))
+        #expect(rendering == ISO_9075.Rendering(sql: #"log(CAST($1 AS NUMERIC), CAST("measurements"."value" AS NUMERIC))"#, values: [.double(2)]))
     }
 
     @Test func `trigonometric functions render their names`() {
@@ -66,5 +71,43 @@ import Testing
         #expect(PostgreSQL().render(measurement.angle.degrees().queryFragment).sql == #"degrees("measurements"."angle")"#)
         #expect(PostgreSQL().render(measurement.angle.atan2(measurement.value).queryFragment).sql
             == #"atan2("measurements"."angle", "measurements"."value")"#)
+    }
+
+    @Test func `numeric-only functions cast a double to numeric`() {
+        #expect(PostgreSQL().render(measurement.value.div(measurement.angle).queryFragment).sql
+            == #"div(CAST("measurements"."value" AS NUMERIC), CAST("measurements"."angle" AS NUMERIC))"#)
+        #expect(PostgreSQL().render(measurement.value.mod(measurement.angle).queryFragment).sql
+            == #"mod(CAST("measurements"."value" AS NUMERIC), CAST("measurements"."angle" AS NUMERIC))"#)
+        #expect(PostgreSQL().render(measurement.value.minScale().queryFragment).sql
+            == #"min_scale(CAST("measurements"."value" AS NUMERIC))"#)
+        #expect(PostgreSQL().render(measurement.value.trimScale().queryFragment).sql
+            == #"trim_scale(CAST("measurements"."value" AS NUMERIC))"#)
+    }
+
+    @Test func `integer division and modulo stay integral`() {
+        #expect(PostgreSQL().render(number.value.mod(number.divisor).queryFragment).sql
+            == #"mod("numbers"."value", "numbers"."divisor")"#)
+    }
+
+    @Test func `a width bucket inlines its bucket count`() {
+        let rendering = PostgreSQL().render(measurement.value.widthBucket(from: 0.0, to: 10.0, buckets: 5).queryFragment)
+        #expect(rendering == ISO_9075.Rendering(
+            sql: #"width_bucket("measurements"."value", $1, $2, 5)"#,
+            values: [.double(0), .double(10)]
+        ))
+    }
+
+    @Test func `degree-based trigonometry renders its names`() {
+        #expect(PostgreSQL().render(measurement.angle.sinDegrees().queryFragment).sql == #"sind("measurements"."angle")"#)
+        #expect(PostgreSQL().render(measurement.angle.atan2Degrees(measurement.value).queryFragment).sql
+            == #"atan2d("measurements"."angle", "measurements"."value")"#)
+    }
+
+    @Test func `random numbers in a range bind their bounds`() {
+        #expect(PostgreSQL().render(PostgreSQL.Math.random(in: 1...6).queryFragment) == ISO_9075.Rendering(
+            sql: "random($1, $2)",
+            values: [.int(1), .int(6)]
+        ))
+        #expect(PostgreSQL().render(PostgreSQL.Math.randomNormal().queryFragment).sql == "random_normal($1, $2)")
     }
 }

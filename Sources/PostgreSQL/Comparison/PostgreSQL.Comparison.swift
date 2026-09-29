@@ -6,26 +6,24 @@ extension PostgreSQL {
 }
 
 extension PostgreSQL.Comparison {
-    public static func greatest<Value, each Other: QueryExpression>(
+    public static func greatest<Value>(
         _ first: some QueryExpression<Value>,
         _ second: some QueryExpression<Value>,
-        _ others: repeat each Other
-    ) -> some QueryExpression<Value>
-    where repeat (each Other).QueryValue == Value {
+        _ others: any QueryExpression<Value>...
+    ) -> some QueryExpression<Value> {
         SQLQueryExpression(
-            "greatest(\(arguments(first, second, repeat each others).joined(separator: ", ")))",
+            "greatest(\(([first.queryFragment, second.queryFragment] + others.map(\.queryFragment)).joined(separator: ", ")))",
             as: Value.self
         )
     }
 
-    public static func least<Value, each Other: QueryExpression>(
+    public static func least<Value>(
         _ first: some QueryExpression<Value>,
         _ second: some QueryExpression<Value>,
-        _ others: repeat each Other
-    ) -> some QueryExpression<Value>
-    where repeat (each Other).QueryValue == Value {
+        _ others: any QueryExpression<Value>...
+    ) -> some QueryExpression<Value> {
         SQLQueryExpression(
-            "least(\(arguments(first, second, repeat each others).joined(separator: ", ")))",
+            "least(\(([first.queryFragment, second.queryFragment] + others.map(\.queryFragment)).joined(separator: ", ")))",
             as: Value.self
         )
     }

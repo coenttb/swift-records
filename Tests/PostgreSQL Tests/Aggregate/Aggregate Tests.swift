@@ -113,3 +113,43 @@ import Testing
         #expect(rendering.sql.contains("WHERE"))
     }
 }
+
+@Suite struct `Aggregate ordered sets` {
+    let purchase = AggregateFixtures.Purchase.columns
+
+    @Test func `a continuous percentile binds its fraction and orders within the group`() {
+        let rendering = PostgreSQL().render(purchase.amount.percentileCont(0.5).queryFragment)
+        #expect(rendering == ISO_9075.Rendering(
+            sql: #"percentile_cont($1) WITHIN GROUP (ORDER BY "purchases"."amount")"#,
+            values: [.double(0.5)]
+        ))
+    }
+
+    @Test func `a discrete percentile keeps the value type`() {
+        let rendering = PostgreSQL().render(purchase.customerID.percentileDisc(0.9, filter: purchase.isPaid).queryFragment)
+        #expect(rendering.sql == #"percentile_disc($1) WITHIN GROUP (ORDER BY "purchases"."customerID") FILTER (WHERE "purchases"."isPaid")"#)
+    }
+
+    @Test func `mode takes no arguments`() {
+        let rendering = PostgreSQL().render(purchase.customerID.mode().queryFragment)
+        #expect(rendering.sql == #"mode() WITHIN GROUP (ORDER BY "purchases"."customerID")"#)
+    }
+}
+
+@Suite struct `Aggregate booleans and correlations` {
+    let purchase = AggregateFixtures.Purchase.columns
+
+    @Test func `boolean aggregates render their names`() {
+        #expect(PostgreSQL().render(purchase.isPaid.boolAnd().queryFragment).sql == #"bool_and("purchases"."isPaid")"#)
+        #expect(PostgreSQL().render(purchase.isPaid.boolOr().queryFragment).sql == #"bool_or("purchases"."isPaid")"#)
+    }
+
+    @Test func `two-variable statistics take both expressions`() {
+        #expect(PostgreSQL().render(purchase.amount.corr(purchase.discount).queryFragment).sql
+            == #"corr("purchases"."amount", "purchases"."discount")"#)
+        #expect(PostgreSQL().render(purchase.amount.covarSamp(purchase.customerID).queryFragment).sql
+            == #"covar_samp("purchases"."amount", "purchases"."customerID")"#)
+        #expect(PostgreSQL().render(purchase.amount.regrSlope(purchase.discount).queryFragment).sql
+            == #"regr_slope("purchases"."amount", "purchases"."discount")"#)
+    }
+}

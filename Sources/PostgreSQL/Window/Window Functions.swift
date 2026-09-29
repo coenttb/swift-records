@@ -6,32 +6,31 @@ extension QueryExpression where QueryValue: QueryBindable {
         offset: Int = 1,
         default defaultValue: QueryValue? = nil
     ) -> PostgreSQL.Window.Function<QueryValue._Optionalized> {
-        PostgreSQL.Window.Function(
-            "LAG",
-            [queryFragment, "\(raw: offset)"] + (defaultValue.map { [$0.queryFragment] } ?? [])
-        )
+        PostgreSQL.Window.Function("lag", shifted(by: offset, default: defaultValue))
     }
 
     public func lead(
         offset: Int = 1,
         default defaultValue: QueryValue? = nil
     ) -> PostgreSQL.Window.Function<QueryValue._Optionalized> {
-        PostgreSQL.Window.Function(
-            "LEAD",
-            [queryFragment, "\(raw: offset)"] + (defaultValue.map { [$0.queryFragment] } ?? [])
-        )
+        PostgreSQL.Window.Function("lead", shifted(by: offset, default: defaultValue))
     }
 
     public func firstValue() -> PostgreSQL.Window.Function<QueryValue> {
-        PostgreSQL.Window.Function("FIRST_VALUE", [queryFragment])
+        PostgreSQL.Window.Function("first_value", [queryFragment])
     }
 
     public func lastValue() -> PostgreSQL.Window.Function<QueryValue> {
-        PostgreSQL.Window.Function("LAST_VALUE", [queryFragment])
+        PostgreSQL.Window.Function("last_value", [queryFragment])
     }
 
     public func nthValue(_ position: Int) -> PostgreSQL.Window.Function<QueryValue._Optionalized> {
-        precondition(position > 0, "nth value position must be positive (1-indexed)")
-        return PostgreSQL.Window.Function("NTH_VALUE", [queryFragment, "\(raw: position)"])
+        precondition(position > 0, "nth_value position must be positive (1-indexed)")
+        return PostgreSQL.Window.Function("nth_value", [queryFragment, "\(raw: position)"])
+    }
+
+    private func shifted(by offset: Int, default defaultValue: QueryValue?) -> [ISO_9075.Fragment] {
+        precondition(offset >= 0, "a window offset must not be negative, got \(offset)")
+        return [queryFragment, "\(raw: offset)"] + (defaultValue.map { [$0.queryFragment] } ?? [])
     }
 }

@@ -6,7 +6,7 @@ extension QueryExpression where QueryValue: QueryBindable & QueryDecodable {
         distinct isDistinct: Bool = false,
         order: (some QueryExpression)? = Bool?.none,
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<PostgreSQL.Array<QueryValue>?> {
+    ) -> PostgreSQL.Aggregate<PostgreSQL.Array<QueryValue>?> {
         PostgreSQL.Aggregate<PostgreSQL.Array<QueryValue>?>(
             "array_agg",
             distinct: isDistinct,
@@ -23,7 +23,7 @@ extension QueryExpression where QueryValue: _OptionalPromotable<String?> {
         distinct isDistinct: Bool = false,
         order: (some QueryExpression)? = Bool?.none,
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<String?> {
+    ) -> PostgreSQL.Aggregate<String?> {
         PostgreSQL.Aggregate<String?>(
             "string_agg",
             distinct: isDistinct,
@@ -41,7 +41,7 @@ extension QueryExpression where QueryValue: QueryBindable {
         distinct isDistinct: Bool = false,
         order: (some QueryExpression)? = Bool?.none,
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<String?> {
+    ) -> PostgreSQL.Aggregate<String?> {
         PostgreSQL.Aggregate<String?>(
             "string_agg",
             distinct: isDistinct,
@@ -56,38 +56,134 @@ extension QueryExpression
 where QueryValue: _OptionalPromotable, QueryValue._Optionalized.Wrapped: Numeric {
     public func stddev(
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<Double?> {
+    ) -> PostgreSQL.Aggregate<Double?> {
         PostgreSQL.Aggregate<Double?>("stddev", [queryFragment], filter: filter?.queryFragment)
     }
 
     public func stddevPop(
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<Double?> {
+    ) -> PostgreSQL.Aggregate<Double?> {
         PostgreSQL.Aggregate<Double?>("stddev_pop", [queryFragment], filter: filter?.queryFragment)
     }
 
     public func stddevSamp(
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<Double?> {
+    ) -> PostgreSQL.Aggregate<Double?> {
         PostgreSQL.Aggregate<Double?>("stddev_samp", [queryFragment], filter: filter?.queryFragment)
     }
 
     public func variance(
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<Double?> {
+    ) -> PostgreSQL.Aggregate<Double?> {
         PostgreSQL.Aggregate<Double?>("variance", [queryFragment], filter: filter?.queryFragment)
     }
 
     public func varPop(
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<Double?> {
+    ) -> PostgreSQL.Aggregate<Double?> {
         PostgreSQL.Aggregate<Double?>("var_pop", [queryFragment], filter: filter?.queryFragment)
     }
 
     public func varSamp(
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<Double?> {
+    ) -> PostgreSQL.Aggregate<Double?> {
         PostgreSQL.Aggregate<Double?>("var_samp", [queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func percentileCont(
+        _ fraction: Double,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?> {
+        precondition((0...1).contains(fraction), "percentile_cont takes a fraction between 0 and 1, got \(fraction)")
+        return PostgreSQL.Aggregate<Double?>(
+            "percentile_cont",
+            ["\(bind: fraction)"],
+            within: queryFragment,
+            filter: filter?.queryFragment
+        )
+    }
+
+    public func corr<Other: QueryExpression>(
+        _ other: Other,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?>
+    where Other.QueryValue: _OptionalPromotable, Other.QueryValue._Optionalized.Wrapped: Numeric {
+        PostgreSQL.Aggregate<Double?>("corr", [queryFragment, other.queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func covarPop<Other: QueryExpression>(
+        _ other: Other,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?>
+    where Other.QueryValue: _OptionalPromotable, Other.QueryValue._Optionalized.Wrapped: Numeric {
+        PostgreSQL.Aggregate<Double?>("covar_pop", [queryFragment, other.queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func covarSamp<Other: QueryExpression>(
+        _ other: Other,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?>
+    where Other.QueryValue: _OptionalPromotable, Other.QueryValue._Optionalized.Wrapped: Numeric {
+        PostgreSQL.Aggregate<Double?>("covar_samp", [queryFragment, other.queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func regrSlope<Other: QueryExpression>(
+        _ other: Other,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?>
+    where Other.QueryValue: _OptionalPromotable, Other.QueryValue._Optionalized.Wrapped: Numeric {
+        PostgreSQL.Aggregate<Double?>("regr_slope", [queryFragment, other.queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func regrIntercept<Other: QueryExpression>(
+        _ other: Other,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?>
+    where Other.QueryValue: _OptionalPromotable, Other.QueryValue._Optionalized.Wrapped: Numeric {
+        PostgreSQL.Aggregate<Double?>("regr_intercept", [queryFragment, other.queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func regrR2<Other: QueryExpression>(
+        _ other: Other,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Double?>
+    where Other.QueryValue: _OptionalPromotable, Other.QueryValue._Optionalized.Wrapped: Numeric {
+        PostgreSQL.Aggregate<Double?>("regr_r2", [queryFragment, other.queryFragment], filter: filter?.queryFragment)
+    }
+}
+
+extension QueryExpression where QueryValue: QueryBindable & _OptionalPromotable {
+    public func percentileDisc(
+        _ fraction: Double,
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<QueryValue._Optionalized> {
+        precondition((0...1).contains(fraction), "percentile_disc takes a fraction between 0 and 1, got \(fraction)")
+        return PostgreSQL.Aggregate<QueryValue._Optionalized>(
+            "percentile_disc",
+            ["\(bind: fraction)"],
+            within: queryFragment,
+            filter: filter?.queryFragment
+        )
+    }
+
+    public func mode(
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<QueryValue._Optionalized> {
+        PostgreSQL.Aggregate<QueryValue._Optionalized>("mode", [], within: queryFragment, filter: filter?.queryFragment)
+    }
+}
+
+extension QueryExpression where QueryValue: _OptionalPromotable<Bool?> {
+    public func boolAnd(
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Bool?> {
+        PostgreSQL.Aggregate<Bool?>("bool_and", [queryFragment], filter: filter?.queryFragment)
+    }
+
+    public func boolOr(
+        filter: (some QueryExpression<Bool>)? = Bool?.none
+    ) -> PostgreSQL.Aggregate<Bool?> {
+        PostgreSQL.Aggregate<Bool?>("bool_or", [queryFragment], filter: filter?.queryFragment)
     }
 }
 

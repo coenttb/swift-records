@@ -35,7 +35,7 @@
                 try next { value in
                     switch value {
                     case .blob(let bytes), .json(let bytes): bytes
-                    case .text(let text): text.utf8.map(Byte.init)
+                    case .text(let text): text.utf8.map(Byte.init(bitPattern:))
                     default: nil
                     }
                 }

@@ -29,8 +29,14 @@ extension PostgreSQL.Series {
         )
     }
 
-    public static func subscripts<Element: QueryBindable & QueryDecodable>(
-        of array: some QueryExpression<PostgreSQL.Array<Element>>,
+    public static func unnest<Source: QueryExpression>(
+        _ array: Source
+    ) -> some QueryExpression<Source.QueryValue.Element> where Source.QueryValue: PostgreSQL.ArrayRepresentable {
+        SQLQueryExpression("unnest(\(array))", as: Source.QueryValue.Element.self)
+    }
+
+    public static func subscripts(
+        of array: some QueryExpression<some PostgreSQL.ArrayRepresentable>,
         dimension: Int = 1,
         reversed isReversed: Bool = false
     ) -> some QueryExpression<Int> {

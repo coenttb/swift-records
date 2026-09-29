@@ -92,7 +92,7 @@
 
         @Test func `bind nulls and blobs`() throws {
             let rendering = PostgreSQL().render(
-                "UPDATE files SET content = \(ISO_9075.Value.blob([1, 2, 3].map(Byte.init))), owner = \(ISO_9075.Value.null)"
+                "UPDATE files SET content = \(ISO_9075.Value.blob([1, 2, 3].map(Byte.init(bitPattern:)))), owner = \(ISO_9075.Value.null)"
             )
             #expect(try PostgresQuery(rendering).binds.count == 2)
         }

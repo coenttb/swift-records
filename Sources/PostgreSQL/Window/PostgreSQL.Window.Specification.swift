@@ -58,34 +58,46 @@ extension PostgreSQL.Window.Specification {
 
     public func rows(
         between start: PostgreSQL.Window.Frame.Bound,
-        and end: PostgreSQL.Window.Frame.Bound
+        and end: PostgreSQL.Window.Frame.Bound,
+        excluding exclusion: PostgreSQL.Window.Frame.Exclusion? = nil
     ) -> Self {
-        framed(PostgreSQL.Window.Frame(.rows, from: start, to: end))
+        framed(PostgreSQL.Window.Frame(.rows, from: start, to: end, excluding: exclusion))
     }
 
-    public func rows(_ start: PostgreSQL.Window.Frame.Bound) -> Self {
-        framed(PostgreSQL.Window.Frame(.rows, from: start))
+    public func rows(
+        _ start: PostgreSQL.Window.Frame.Bound,
+        excluding exclusion: PostgreSQL.Window.Frame.Exclusion? = nil
+    ) -> Self {
+        framed(PostgreSQL.Window.Frame(.rows, from: start, excluding: exclusion))
     }
 
     public func range(
         between start: PostgreSQL.Window.Frame.Bound,
-        and end: PostgreSQL.Window.Frame.Bound
+        and end: PostgreSQL.Window.Frame.Bound,
+        excluding exclusion: PostgreSQL.Window.Frame.Exclusion? = nil
     ) -> Self {
-        framed(PostgreSQL.Window.Frame(.range, from: start, to: end))
+        framed(PostgreSQL.Window.Frame(.range, from: start, to: end, excluding: exclusion))
     }
 
-    public func range(_ start: PostgreSQL.Window.Frame.Bound) -> Self {
-        framed(PostgreSQL.Window.Frame(.range, from: start))
+    public func range(
+        _ start: PostgreSQL.Window.Frame.Bound,
+        excluding exclusion: PostgreSQL.Window.Frame.Exclusion? = nil
+    ) -> Self {
+        framed(PostgreSQL.Window.Frame(.range, from: start, excluding: exclusion))
     }
 
     public func groups(
         between start: PostgreSQL.Window.Frame.Bound,
-        and end: PostgreSQL.Window.Frame.Bound
+        and end: PostgreSQL.Window.Frame.Bound,
+        excluding exclusion: PostgreSQL.Window.Frame.Exclusion? = nil
     ) -> Self {
-        framed(PostgreSQL.Window.Frame(.groups, from: start, to: end))
+        framed(PostgreSQL.Window.Frame(.groups, from: start, to: end, excluding: exclusion))
     }
 
-    public func groups(_ start: PostgreSQL.Window.Frame.Bound) -> Self {
-        framed(PostgreSQL.Window.Frame(.groups, from: start))
+    public func groups(
+        _ start: PostgreSQL.Window.Frame.Bound,
+        excluding exclusion: PostgreSQL.Window.Frame.Exclusion? = nil
+    ) -> Self {
+        framed(PostgreSQL.Window.Frame(.groups, from: start, excluding: exclusion))
     }
 }

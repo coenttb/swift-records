@@ -7,7 +7,7 @@ extension QueryExpression {
         distinct isDistinct: Bool = false,
         order: (some QueryExpression)? = Bool?.none,
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<[Byte]?> {
+    ) -> PostgreSQL.Aggregate<[Byte]?> {
         PostgreSQL.Aggregate<[Byte]?>(
             "json_agg",
             distinct: isDistinct,
@@ -21,7 +21,7 @@ extension QueryExpression {
         distinct isDistinct: Bool = false,
         order: (some QueryExpression)? = Bool?.none,
         filter: (some QueryExpression<Bool>)? = Bool?.none
-    ) -> some QueryExpression<[Byte]?> {
+    ) -> PostgreSQL.Aggregate<[Byte]?> {
         PostgreSQL.Aggregate<[Byte]?>(
             "jsonb_agg",
             distinct: isDistinct,

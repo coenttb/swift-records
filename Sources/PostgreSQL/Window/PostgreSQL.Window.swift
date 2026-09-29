@@ -6,27 +6,27 @@ extension PostgreSQL {
 
 extension PostgreSQL.Window {
     public static func rowNumber() -> Function<Int> {
-        Function("ROW_NUMBER")
+        Function("row_number")
     }
 
     public static func rank() -> Function<Int> {
-        Function("RANK")
+        Function("rank")
     }
 
     public static func denseRank() -> Function<Int> {
-        Function("DENSE_RANK")
+        Function("dense_rank")
     }
 
     public static func percentRank() -> Function<Double> {
-        Function("PERCENT_RANK")
+        Function("percent_rank")
     }
 
     public static func cumeDist() -> Function<Double> {
-        Function("CUME_DIST")
+        Function("cume_dist")
     }
 
     public static func ntile(_ buckets: Int) -> Function<Int> {
         precondition(buckets > 0, "ntile buckets must be positive")
-        return Function("NTILE", ["\(raw: buckets)"])
+        return Function("ntile", ["\(raw: buckets)"])
     }
 }
