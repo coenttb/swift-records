@@ -1,6 +1,7 @@
 #if PostgresNIO
     public import ISO_9075_Call_Level_Interface
     public import SQL
+    internal import Synchronization
 
     extension PostgreSQL {
         public struct Cursor<Element> {

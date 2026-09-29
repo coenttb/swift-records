@@ -52,7 +52,7 @@ enum CoreFixtures {
     }
 
     @Test func `inlines array elements in the dialect`() throws {
-        #expect(try PostgreSQL().inline("\(ISO_9075.Value.array([.blob([Byte(bitPattern: 0xFF)])]))") == #"ARRAY['\xff'::BYTEA]"#)
+        #expect(try PostgreSQL().inline("\(ISO_9075.Value.array([.blob([Byte(bitPattern: 0xFF)])], of: .blob))") == #"ARRAY['\xff'::BYTEA]::BYTEA[]"#)
     }
 
     @Test func `spells an absent primary key as DEFAULT`() {
@@ -72,8 +72,8 @@ enum CoreFixtures {
 
     @Test func `inserts a draft without a key as DEFAULT`() {
         let rendering = PostgreSQL().render(CoreFixtures.Post.insert { CoreFixtures.Post.Draft(title: "Hello") }.query)
-        #expect(rendering.sql.hasSuffix("VALUES\n(DEFAULT, $1, '{}')"))
-        #expect(rendering.values == [.text("Hello")])
+        #expect(rendering.sql.hasSuffix("VALUES\n(DEFAULT, $1, $2)"))
+        #expect(rendering.values == [.text("Hello"), .array([], of: .text)])
     }
 }
 
@@ -105,12 +105,17 @@ enum CoreFixtures {
 @Suite struct `Arrays` {
     @Test func `bind their elements as one array value`() {
         let array = PostgreSQL.Array<String>(["a", "b"])
-        #expect(array.queryBinding == .array([.text("a"), .text("b")]))
-        #expect(PostgreSQL().render(array.queryFragment) == ISO_9075.Rendering(sql: "$1", values: [.array([.text("a"), .text("b")])]))
+        #expect(array.queryBinding == .array([.text("a"), .text("b")], of: .text))
+        #expect(PostgreSQL().render(array.queryFragment) == ISO_9075.Rendering(sql: "$1", values: [.array([.text("a"), .text("b")], of: .text)]))
     }
 
-    @Test func `render empty as an untyped literal`() {
-        #expect(PostgreSQL().render(PostgreSQL.Array<Int>([]).queryFragment) == ISO_9075.Rendering(sql: "'{}'", values: []))
+    @Test func `bind empty with their element kind`() {
+        #expect(PostgreSQL().render(PostgreSQL.Array<Int>([]).queryFragment) == ISO_9075.Rendering(sql: "$1", values: [.array([], of: .int)]))
+        #expect(PostgreSQL.Array<RFC_4122.UUID>([]).queryBinding == .array([], of: .uuid))
+    }
+
+    @Test func `inline empty with their element type`() throws {
+        #expect(try PostgreSQL().inline("\(ISO_9075.Value.array([], of: .timestamp))") == "ARRAY[]::TIMESTAMPTZ[]")
     }
 
     @Test func `render a typed empty array`() {
@@ -162,7 +167,7 @@ enum CoreFixtures {
         let rendering = PostgreSQL().render(
             CoreFixtures.Post.insert { CoreFixtures.Post(id: 1, title: "Hello", tags: ["swift", "sql"]) }.query
         )
-        #expect(rendering.values == [.int(1), .text("Hello"), .array([.text("swift"), .text("sql")])])
+        #expect(rendering.values == [.int(1), .text("Hello"), .array([.text("swift"), .text("sql")], of: .text)])
     }
 }
 

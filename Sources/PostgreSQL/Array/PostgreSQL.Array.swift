@@ -34,13 +34,9 @@ extension PostgreSQL.Array: QueryRepresentable {
     public var queryOutput: [Element.QueryOutput] { elements }
 }
 
-extension PostgreSQL.Array: QueryBindable {
+extension PostgreSQL.Array: QueryExpression, QueryBindable where Element: PostgreSQL.DataType {
     public var queryBinding: ISO_9075.Value {
-        .array(elements.map { Element(queryOutput: $0).queryBinding })
-    }
-
-    public var queryFragment: ISO_9075.Fragment {
-        elements.isEmpty ? "'{}'" : "\(queryBinding)"
+        .array(elements.map { Element(queryOutput: $0).queryBinding }, of: Element.valueKind)
     }
 }
 

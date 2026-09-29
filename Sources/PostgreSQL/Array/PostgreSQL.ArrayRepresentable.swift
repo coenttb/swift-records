@@ -6,7 +6,7 @@ extension PostgreSQL {
     }
 }
 
-extension PostgreSQL.Array: PostgreSQL.ArrayRepresentable {}
+extension PostgreSQL.Array: PostgreSQL.ArrayRepresentable where Element: PostgreSQL.DataType {}
 
 extension Optional: PostgreSQL.ArrayRepresentable where Wrapped: PostgreSQL.ArrayRepresentable {
     public typealias Element = Wrapped.Element

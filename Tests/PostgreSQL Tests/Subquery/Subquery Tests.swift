@@ -43,7 +43,7 @@ import Testing
         )
         #expect(rendering == ISO_9075.Rendering(
             sql: #"("shop_products"."id") = ANY ($1)"#,
-            values: [.array([.int(1), .int(2)])]
+            values: [.array([.int(1), .int(2)], of: .int)]
         ))
     }
 

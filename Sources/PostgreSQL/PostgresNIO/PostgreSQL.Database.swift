@@ -72,7 +72,7 @@
                 try await leased { connection throws(ISO_9075.Error) in
                     _ = try connection.execute(begin)
                     let value: Value
-                    do {
+                    do throws(ISO_9075.Error) {
                         value = try body(connection)
                     } catch let failure {
                         do {

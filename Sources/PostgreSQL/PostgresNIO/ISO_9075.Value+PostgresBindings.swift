@@ -1,10 +1,11 @@
 #if PostgresNIO
+    internal import Byte
     internal import Foundation
     public import ISO_9075_Call_Level_Interface
-    internal import NIOCore
+    public import NIOCore
     public import PostgresNIO
     internal import RFC_4122
-    internal import Time
+    public import Time
 
     extension PostgresQuery {
         public init(_ rendering: ISO_9075.Rendering) throws(ISO_9075.Error) {
@@ -25,34 +26,32 @@
             case .double(let double): bindings.append(double)
             case .text(let text): bindings.append(text)
             case .blob(let bytes): bindings.append(ByteBuffer(bytes: bytes.map(\.underlying)))
-            case .timestamp(let instant): bindings.append(Date(instant))
+            case .timestamp(let instant): bindings.append(instant)
             case .uuid(let uuid): bindings.append(Foundation.UUID(uuid: uuid.bytes))
             case .json(let bytes): bindings.append(PostgresData(jsonb: Data(bytes.map(\.underlying))))
             case .decimal(let digits):
-                guard let decimal = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")) else {
+                guard digits.wholeMatch(of: /[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?|NaN|[+-]?Infinity/) != nil else {
                     throw .binding(ISO_9075.Value.Failure("\(digits) is not a decimal"))
                 }
-                do {
-                    try bindings.append(decimal)
-                } catch {
-                    throw .binding(ISO_9075.Value.Failure(error))
-                }
-            case .array(let values): try ISO_9075.Value.bind(array: values, to: &bindings)
+                bindings.append(PostgresData(type: .numeric, formatCode: .text, value: ByteBuffer(string: digits)))
+            case .array(let values, let kind): try ISO_9075.Value.bind(array: values, of: kind, to: &bindings)
             case .invalid(let failure): throw .binding(failure)
             }
         }
 
-        private static func bind(array values: [ISO_9075.Value], to bindings: inout PostgresBindings) throws(ISO_9075.Error) {
+        private static func bind(
+            array values: [ISO_9075.Value],
+            of kind: ISO_9075.Value.Kind,
+            to bindings: inout PostgresBindings
+        ) throws(ISO_9075.Error) {
             func homogeneous<Element>(_ element: (ISO_9075.Value) -> Element?) throws(ISO_9075.Error) -> [Element] {
                 let elements = values.compactMap(element)
                 guard elements.count == values.count else {
-                    throw .binding(ISO_9075.Value.Failure("PostgreSQL arrays hold one element type and no nulls when bound: \(values)"))
+                    throw .binding(ISO_9075.Value.Failure("PostgreSQL arrays of \(kind) hold only \(kind) elements and no nulls when bound: \(values)"))
                 }
                 return elements
             }
-            switch values.first {
-            case nil:
-                bindings.append([String]())
+            switch kind {
             case .bool:
                 bindings.append(try homogeneous { if case .bool(let bool) = $0 { bool } else { nil } })
             case .int:
@@ -61,33 +60,63 @@
                 bindings.append(try homogeneous { if case .double(let double) = $0 { double } else { nil } })
             case .text:
                 bindings.append(try homogeneous { if case .text(let text) = $0 { text } else { nil } })
+            case .blob:
+                bindings.append(try homogeneous { if case .blob(let bytes) = $0 { ByteBuffer(bytes: bytes.map(\.underlying)) } else { nil } })
             case .uuid:
                 bindings.append(try homogeneous { if case .uuid(let uuid) = $0 { Foundation.UUID(uuid: uuid.bytes) } else { nil } })
             case .timestamp:
-                bindings.append(try homogeneous { if case .timestamp(let instant) = $0 { Date(instant) } else { nil } })
-            case let first?:
-                throw .binding(ISO_9075.Value.Failure("PostgreSQL has no array binding for \(first)"))
+                bindings.append(try homogeneous { if case .timestamp(let instant) = $0 { instant } else { nil } })
+            case .decimal, .json:
+                throw .binding(ISO_9075.Value.Failure("PostgreSQL has no array binding for \(kind)"))
             }
         }
     }
 
-    extension Date {
-        init(_ instant: Time.Instant) {
-            self.init(
-                timeIntervalSince1970: Double(instant.secondsSinceUnixEpoch)
-                    + Double(instant.nanosecondFraction) / 1_000_000_000
+    extension Time.Instant: @retroactive PostgresNonThrowingEncodable, @retroactive PostgresArrayEncodable {
+        public static var psqlType: PostgresDataType { .timestamptz }
+
+        public static var psqlFormat: PostgresFormat { .binary }
+
+        public static var psqlArrayType: PostgresDataType { .timestamptzArray }
+
+        public func encode<JSONEncoder: PostgresJSONEncoder>(
+            into byteBuffer: inout ByteBuffer,
+            context: PostgresEncodingContext<JSONEncoder>
+        ) {
+            byteBuffer.writeInteger(
+                (secondsSinceUnixEpoch - Time.Instant.postgresEpoch) * 1_000_000 + Int64(nanosecondFraction / 1_000)
             )
         }
     }
 
-    extension Time.Instant {
-        init(_ date: Date) {
-            let seconds = date.timeIntervalSince1970.rounded(.down)
-            self.init(
-                _unchecked: (),
-                secondsSinceUnixEpoch: Int64(seconds),
-                nanosecondFraction: Int32(((date.timeIntervalSince1970 - seconds) * 1_000_000_000).rounded(.down))
-            )
+    extension Time.Instant: @retroactive PostgresDecodable, @retroactive PostgresArrayDecodable {
+        public init<JSONDecoder: PostgresJSONDecoder>(
+            from buffer: inout ByteBuffer,
+            type: PostgresDataType,
+            format: PostgresFormat,
+            context: PostgresDecodingContext<JSONDecoder>
+        ) throws {
+            switch (type, format) {
+            case (.timestamptz, .binary), (.timestamp, .binary):
+                guard buffer.readableBytes == 8, let microseconds = buffer.readInteger(as: Int64.self) else {
+                    throw PostgresDecodingError.Code.failure
+                }
+                let (seconds, remainder) = microseconds.quotientAndRemainder(dividingBy: 1_000_000)
+                self.init(
+                    _unchecked: (),
+                    secondsSinceUnixEpoch: Time.Instant.postgresEpoch + seconds - (remainder < 0 ? 1 : 0),
+                    nanosecondFraction: Int32((remainder < 0 ? remainder + 1_000_000 : remainder) * 1_000)
+                )
+            case (.date, .binary):
+                guard buffer.readableBytes == 4, let days = buffer.readInteger(as: Int32.self) else {
+                    throw PostgresDecodingError.Code.failure
+                }
+                self.init(secondsSinceUnixEpoch: Time.Instant.postgresEpoch + Int64(days) * 86_400)
+            default:
+                throw PostgresDecodingError.Code.typeMismatch
+            }
         }
+
+        static let postgresEpoch: Int64 = 946_684_800
     }
 #endif

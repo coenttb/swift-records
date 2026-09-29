@@ -27,4 +27,6 @@ extension PostgreSQL.TextSearch.Vector: QueryDecodable {
 
 extension PostgreSQL.TextSearch.Vector: PostgreSQL.DataType {
     public static var typeName: String { "TSVECTOR" }
+
+    public static var valueKind: ISO_9075.Value.Kind { .text }
 }

@@ -43,7 +43,7 @@
                 do {
                     return try postgres.query(query, logger: logger).wait()
                 } catch {
-                    throw .execution("\(error) in \(statement.sql)")
+                    throw .execution("\(String(reflecting: error)) in \(statement.sql)")
                 }
             }
         }

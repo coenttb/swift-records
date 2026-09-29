@@ -67,6 +67,64 @@
             #expect(values == [[.int(1_767_225_600), .blob(bytes)]])
         }
 
+        @Test func `an instant round-trips as TIMESTAMPTZ to the microsecond`() async throws {
+            let instants = [
+                try Time.Instant(secondsSinceUnixEpoch: 1_767_225_600, nanosecondFraction: 123_456_789),
+                try Time.Instant(secondsSinceUnixEpoch: 946_684_800, nanosecondFraction: 999),
+                try Time.Instant(secondsSinceUnixEpoch: -1, nanosecondFraction: 999_999_999),
+            ]
+            let fetched = try await database.read { connection throws(ISO_9075.Error) in
+                try instants.map { instant throws(ISO_9075.Error) in
+                    try connection.fetchAll("SELECT \(ISO_9075.Value.timestamp(instant)), pg_typeof(\(ISO_9075.Value.timestamp(instant)))::TEXT") { row throws(ISO_9075.Error) in
+                        [try row.value(at: 0), try row.value(at: 1)]
+                    }
+                }
+            }
+            #expect(fetched == [
+                [[.timestamp(try Time.Instant(secondsSinceUnixEpoch: 1_767_225_600, nanosecondFraction: 123_456_000)), .text("timestamp with time zone")]],
+                [[.timestamp(Time.Instant(secondsSinceUnixEpoch: 946_684_800)), .text("timestamp with time zone")]],
+                [[.timestamp(try Time.Instant(secondsSinceUnixEpoch: -1, nanosecondFraction: 999_999_000)), .text("timestamp with time zone")]],
+            ])
+        }
+
+        @Test func `an instant keeps its microseconds through a row`() async throws {
+            var draft = try LiveFixtures.sample("microseconds")
+            draft.createdAt = try Time.Instant(secondsSinceUnixEpoch: 1_767_225_600, nanosecondFraction: 654_321_987)
+            let fetched = try await database.write { [draft] connection throws(ISO_9075.Error) in
+                try Sample.insert { draft }.returning(\.createdAt).fetchOne(connection)
+            }
+            #expect(fetched == (try Time.Instant(secondsSinceUnixEpoch: 1_767_225_600, nanosecondFraction: 654_321_000)))
+        }
+
+        @Test func `an empty array binds with its element's array type`() async throws {
+            let kinds: [(ISO_9075.Value.Kind, String)] = [
+                (.bool, "boolean[]"),
+                (.int, "bigint[]"),
+                (.double, "double precision[]"),
+                (.text, "text[]"),
+                (.blob, "bytea[]"),
+                (.timestamp, "timestamp with time zone[]"),
+                (.uuid, "uuid[]"),
+            ]
+            let types = try await database.read { connection throws(ISO_9075.Error) in
+                try kinds.map { kind, _ throws(ISO_9075.Error) in
+                    try connection.fetchAll(
+                        "SELECT pg_typeof(\(ISO_9075.Value.array([], of: kind)))::TEXT, cardinality(\(ISO_9075.Value.array([], of: kind)))"
+                    ) { row throws(ISO_9075.Error) in [try row.value(at: 0), try row.value(at: 1)] }
+                }
+            }
+            #expect(types == kinds.map { _, type in [[.text(type), .int(0)]] })
+        }
+
+        @Test func `an empty array round-trips through a typed column`() async throws {
+            var draft = try LiveFixtures.sample("empty tags")
+            draft.tags = []
+            let fetched = try await database.write { [draft] connection throws(ISO_9075.Error) in
+                try Sample.insert { draft }.returning(\.tags).fetchOne(connection)
+            }
+            #expect(fetched == [])
+        }
+
         @Test func `a cast uses the PostgreSQL type names`() async throws {
             let draft = try LiveFixtures.sample("cast", count: 7)
             let texts = try await database.write { connection throws(ISO_9075.Error) in

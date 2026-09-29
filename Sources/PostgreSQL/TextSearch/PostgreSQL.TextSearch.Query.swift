@@ -27,4 +27,6 @@ extension PostgreSQL.TextSearch.Query: QueryDecodable {
 
 extension PostgreSQL.TextSearch.Query: PostgreSQL.DataType {
     public static var typeName: String { "TSQUERY" }
+
+    public static var valueKind: ISO_9075.Value.Kind { .text }
 }

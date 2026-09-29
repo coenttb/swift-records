@@ -34,7 +34,7 @@
                 case .float4, .float8: .double(try decoded(Double.self))
                 case .numeric: .decimal(try decoded(Decimal.self).description)
                 case .bytea: .blob(try decoded(ByteBuffer.self).readableBytesView.map(Byte.init(bitPattern:)))
-                case .timestamp, .timestamptz, .date: .timestamp(Time.Instant(try decoded(Date.self)))
+                case .timestamp, .timestamptz, .date: .timestamp(try decoded(Time.Instant.self))
                 case .uuid: .uuid(RFC_4122.UUID(bytes: try decoded(Foundation.UUID.self).uuid))
                 case .json, .jsonb: .json(try decoded(String.self).utf8.map(Byte.init(bitPattern:)))
                 case .boolArray, .int2Array, .int4Array, .int8Array, .float4Array, .float8Array, .textArray, .varcharArray,
@@ -67,11 +67,11 @@
                 case .float4Array, .float8Array: try literal(Double.self) { "\($0)" }
                 case .uuidArray: try literal(Foundation.UUID.self) { $0.uuidString.lowercased() }
                 case .timestampArray, .timestamptzArray, .dateArray:
-                    try literal(Date.self) { date throws(ISO_9075.Error) in
+                    try literal(Time.Instant.self) { instant throws(ISO_9075.Error) in
                         do {
-                            return PostgresCell.quoted(try ISO_9075.Literal.timestamp(Time.Instant(date)))
+                            return PostgresCell.quoted(try ISO_9075.Literal.timestamp(instant))
                         } catch {
-                            throw .decoding("\(date) as a timestamp: \(error)")
+                            throw .decoding("\(instant) as a timestamp: \(error)")
                         }
                     }
                 default: try literal(String.self) { PostgresCell.quoted($0) }

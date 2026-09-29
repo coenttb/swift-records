@@ -25,9 +25,17 @@ import Testing
         #expect(PostgreSQL().render(measurement.value.sign().queryFragment).sql == #"sign("measurements"."value")"#)
     }
 
-    @Test func `rounding to decimal places goes through numeric`() {
-        let rendering = PostgreSQL().render(measurement.value.round(decimalPlaces: 2).queryFragment)
-        #expect(rendering == ISO_9075.Rendering(sql: #"round(CAST("measurements"."value" AS NUMERIC), 2)"#, values: []))
+    @Test func `rounding goes through numeric and returns double precision`() {
+        #expect(PostgreSQL().render(measurement.value.round(2).queryFragment) == ISO_9075.Rendering(
+            sql: #"CAST(round(CAST("measurements"."value" AS NUMERIC), CAST($1 AS INTEGER)) AS DOUBLE PRECISION)"#,
+            values: [.int(2)]
+        ))
+        #expect(PostgreSQL().render(measurement.value.round().queryFragment).sql
+            == #"CAST(round(CAST("measurements"."value" AS NUMERIC)) AS DOUBLE PRECISION)"#)
+    }
+
+    @Test func `an unbounded limit is ALL`() {
+        #expect(PostgreSQL().render(MathFixtures.Measurement.offset(5).select(\.value).query).sql.hasSuffix("LIMIT ALL OFFSET $1"))
     }
 
     @Test func `truncation to decimal places goes through numeric`() {

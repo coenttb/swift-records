@@ -98,12 +98,12 @@
         }
 
         @Test func `bind a homogeneous array`() throws {
-            let rendering = PostgreSQL().render("SELECT \(ISO_9075.Value.array([.int(1), .int(2)]))")
+            let rendering = PostgreSQL().render("SELECT \(ISO_9075.Value.array([.int(1), .int(2)], of: .int))")
             #expect(try PostgresQuery(rendering).binds.count == 1)
         }
 
         @Test func `reject a heterogeneous array with a typed error`() {
-            let rendering = PostgreSQL().render("SELECT \(ISO_9075.Value.array([.int(1), .text("a")]))")
+            let rendering = PostgreSQL().render("SELECT \(ISO_9075.Value.array([.int(1), .text("a")], of: .int))")
             #expect(throws: ISO_9075.Error.self) {
                 try PostgresQuery(rendering)
             }

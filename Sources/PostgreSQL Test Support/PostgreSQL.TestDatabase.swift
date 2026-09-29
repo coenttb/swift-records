@@ -33,7 +33,7 @@
             public func provideScope(
                 for test: Test,
                 testCase: Test.Case?,
-                performing function: @Sendable () async throws -> Void
+                performing function: @concurrent @Sendable () async throws -> Void
             ) async throws {
                 let logger = Logger(label: "swift-postgresql.tests")
                 let name = ISO_9075.Identifier("swift_postgresql_\(String(UInt64.random(in: .min ... .max), radix: 16))")

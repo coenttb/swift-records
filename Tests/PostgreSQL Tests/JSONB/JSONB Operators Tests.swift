@@ -46,14 +46,14 @@ import Testing
             PostgreSQL().render(JSONBFixtures.User.columns.settings.value(at: ["address", "city"]).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"("users"."settings" #> $1::text[])"#,
-                    values: [.array([.text("address"), .text("city")])]
+                    values: [.array([.text("address"), .text("city")], of: .text)]
                 )
         )
         #expect(
             PostgreSQL().render(JSONBFixtures.User.columns.settings.valueAsText(at: ["contact", "email"]).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"("users"."settings" #>> $1::text[])"#,
-                    values: [.array([.text("contact"), .text("email")])]
+                    values: [.array([.text("contact"), .text("email")], of: .text)]
                 )
         )
     }
@@ -72,7 +72,7 @@ import Testing
     @Test func `an empty path stays a typed empty array`() {
         #expect(
             PostgreSQL().render(JSONBFixtures.User.columns.settings.value(at: []).queryFragment)
-                == ISO_9075.Rendering(sql: #"("users"."settings" #> '{}'::text[])"#, values: [])
+                == ISO_9075.Rendering(sql: #"("users"."settings" #> $1::text[])"#, values: [.array([], of: .text)])
         )
     }
 
@@ -104,14 +104,14 @@ import Testing
             PostgreSQL().render(JSONBFixtures.User.columns.settings.hasAny(of: ["theme", "appearance"]).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"("users"."settings" ?| $1::text[])"#,
-                    values: [.array([.text("theme"), .text("appearance")])]
+                    values: [.array([.text("theme"), .text("appearance")], of: .text)]
                 )
         )
         #expect(
             PostgreSQL().render(JSONBFixtures.User.columns.settings.hasAll(of: ["theme", "language"]).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"("users"."settings" ?& $1::text[])"#,
-                    values: [.array([.text("theme"), .text("language")])]
+                    values: [.array([.text("theme"), .text("language")], of: .text)]
                 )
         )
     }
@@ -131,7 +131,7 @@ import Testing
             PostgreSQL().render(JSONBFixtures.User.columns.settings.removing(keys: ["a", "b"]).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"("users"."settings" - $1::text[])"#,
-                    values: [.array([.text("a"), .text("b")])]
+                    values: [.array([.text("a"), .text("b")], of: .text)]
                 )
         )
         #expect(

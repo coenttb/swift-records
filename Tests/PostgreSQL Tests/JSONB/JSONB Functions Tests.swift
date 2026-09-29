@@ -55,14 +55,14 @@ import Testing
             PostgreSQL().render(JSONBFixtures.User.columns.settings.extractPath(["a", "b"]).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"jsonb_extract_path("users"."settings", VARIADIC $1::text[])"#,
-                    values: [.array([.text("a"), .text("b")])]
+                    values: [.array([.text("a"), .text("b")], of: .text)]
                 )
         )
         #expect(
             PostgreSQL().render(JSONBFixtures.User.columns.settings.extractPathText(["a"], format: .json).queryFragment)
                 == ISO_9075.Rendering(
                     sql: #"json_extract_path_text("users"."settings", VARIADIC $1::text[])"#,
-                    values: [.array([.text("a")])]
+                    values: [.array([.text("a")], of: .text)]
                 )
         )
     }
@@ -174,8 +174,8 @@ import Testing
             ) == ISO_9075.Rendering(
                 sql: "json_object($1::text[], $2::text[])",
                 values: [
-                    .array([.text("name"), .text("email")]),
-                    .array([.text("Alice"), .text("alice@example.com")]),
+                    .array([.text("name"), .text("email")], of: .text),
+                    .array([.text("Alice"), .text("alice@example.com")], of: .text),
                 ]
             )
         )

@@ -54,7 +54,7 @@
                         .order(by: \.player)
                         .fetchAll(connection),
                     try Score.select { $0.points.stddev() }.fetchOne(connection),
-                    try Score.where { $0.points.eq(10) }.select { ($0.points.cast() / 3.0).round(decimalPlaces: 2) }.fetchOne(connection)
+                    try Score.where { $0.points.eq(10) }.select { ($0.points.cast() / 3.0).round(2) }.fetchOne(connection)
                 )
             }
             #expect(agg.map(\.0) == ["ada", "bob"])

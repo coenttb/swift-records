@@ -11,7 +11,7 @@ import Testing
         let rendering = PostgreSQL().render(article.tags.contains(PostgreSQL.Array<String>(["swift"])).queryFragment)
         #expect(rendering == ISO_9075.Rendering(
             sql: #"("articles"."tags" @> $1)"#,
-            values: [.array([.text("swift")])]
+            values: [.array([.text("swift")], of: .text)]
         ))
     }
 

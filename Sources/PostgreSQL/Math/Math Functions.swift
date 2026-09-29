@@ -22,10 +22,6 @@ extension QueryExpression where QueryValue: FloatingPoint & QueryBindable {
         SQLQueryExpression("trunc(\(numeric), \(raw: decimalPlaces))", as: QueryValue.self)
     }
 
-    public func round(decimalPlaces: Int) -> some QueryExpression<QueryValue> {
-        SQLQueryExpression("round(\(numeric), \(raw: decimalPlaces))", as: QueryValue.self)
-    }
-
     public func sign() -> some QueryExpression<QueryValue> {
         SQLQueryExpression("sign(\(self))", as: QueryValue.self)
     }
