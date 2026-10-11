@@ -34,32 +34,32 @@
             }
 
             public func read<Value: Sendable>(
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 try await scope(begin: "BEGIN TRANSACTION READ ONLY", end: "COMMIT", body)
             }
 
             public func write<Value: Sendable>(
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 try await scope(begin: "BEGIN", end: "COMMIT", body)
             }
 
             public func write<Value: Sendable>(
                 isolation: PostgreSQL.Isolation,
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 try await scope(begin: isolation.begin, end: "COMMIT", body)
             }
 
             public func withRollback<Value: Sendable>(
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 try await scope(begin: "BEGIN", end: "ROLLBACK", body)
             }
 
             public func writeWithoutTransaction<Value: Sendable>(
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 try await leased(body)
             }
@@ -67,7 +67,7 @@
             private func scope<Value: Sendable>(
                 begin: ISO_9075.Fragment,
                 end: ISO_9075.Fragment,
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 try await leased { connection throws(ISO_9075.Error) in
                     _ = try connection.execute(begin)
@@ -88,16 +88,14 @@
             }
 
             private func leased<Value: Sendable>(
-                _ body: @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
+                _ body: @escaping @Sendable (PostgreSQL.Connection) throws(ISO_9075.Error) -> Value
             ) async throws(ISO_9075.Error) -> Value {
                 let result: Result<Value, ISO_9075.Error>
                 do {
-                    result = try await withoutActuallyEscaping(body) { body in
-                        try await client.withConnection { postgres in
-                            try await threadPool.runIfActive { [logger] in
-                                Result { () throws(ISO_9075.Error) in
-                                    try body(PostgreSQL.Connection(postgres, logger: logger))
-                                }
+                    result = try await client.withConnection { postgres in
+                        try await threadPool.runIfActive { [logger] in
+                            Result { () throws(ISO_9075.Error) in
+                                try body(PostgreSQL.Connection(postgres, logger: logger))
                             }
                         }
                     }
